@@ -48,8 +48,10 @@ compile_commands.json
 Makefile
 *.cmake
 
-# Clion IDE
+# IDEs
+.vscode/
 .idea/
+*.clwb/
 
 # Logs and databases
 *.log
