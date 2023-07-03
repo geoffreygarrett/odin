@@ -1,0 +1,598 @@
+#ifndef MCTS_HPP
+#define MCTS_HPP
+
+#include "base.hpp"
+#include <algorithm>
+#include <complex>
+#include <functional>
+#include <memory>
+#include <odin/logging.hpp>
+#include <random>
+#include <ranges>
+#include <stack>
+#include <variant>
+#include <vector>
+
+
+//// Base Selection Policy (Static)
+//template<typename Derived, typename Node, typename Float = double>
+//struct SelectionPolicy {
+//    Float operator()(Node *node) {
+//        return static_cast<Derived *>(this)->selection_comparator(node);
+//    }
+//};
+//
+//
+//// UBC1 Selection Policy (Static)
+//template<typename Node, typename Float = double>
+//struct UBC1 : public SelectionPolicy<UBC1<Node, Float>, Node, Float> {
+//    Float cp_;
+//
+//    explicit UBC1(Float cp) : cp_(cp) {}
+//
+//    Float selection_comparator(Node *node) {
+//        if (node->visit_count == 0) {
+//            return std::numeric_limits<Float>::max();
+//        }
+//
+//        if (node->parent == nullptr) {
+//            // Root node case
+//            // We could simply return the reward here, as there's no parent to compare against
+//            // Alternatively, you could return a default value, or handle this case outside of the selection_comparator function
+//            return node->reward;
+//        }
+//
+//        Float parent_visits = static_cast<double>(node->parent->visit_count);
+//        return node->reward + cp_ * std::sqrt(std::log(parent_visits) / node->visit_count);
+//    }
+//};
+//
+//// EpsilonGreedy Selection Policy (Static)
+//template<typename Node, typename Float = double>
+//struct EpsilonGreedy : public SelectionPolicy<EpsilonGreedy<Node, Float>, Node, Float> {
+//    Float epsilon;
+//
+//    explicit EpsilonGreedy(Float epsilon) : epsilon(epsilon) {}
+//
+//    Float selection_comparator(Node *node) {
+//        if (node->visit_count == 0) {
+//            return std::numeric_limits<Float>::max();
+//        }
+//        if (node->parent == nullptr) {
+//            // Root node case
+//            // We could simply return the reward here, as there's no parent to compare against
+//            // Alternatively, you could return a default value, or handle this case outside of the selection_comparator function
+//            return node->reward;
+//        }
+//
+//        Float parent_visits = static_cast<double>(node->parent->visit_count);
+//        return node->reward + epsilon * parent_visits / node->visit_count;
+//    }
+//};
+
+template<typename Derived, typename Node, typename Float = double>
+struct SelectionPolicy {
+    Node *operator()(Node *node) {
+        if (node->children.empty()) {
+            throw std::runtime_error("No children to select from");
+        }
+
+        auto comparator = [&](const auto &a, const auto &b) {
+            if (a->visit_count == 0) return false;
+            if (b->visit_count == 0) return true;
+
+            Float a_val = static_cast<Derived *>(this)->value(a.get(), node);
+            Float b_val = static_cast<Derived *>(this)->value(b.get(), node);
+            return a_val < b_val;
+        };
+
+        auto selected_child = std::max_element(node->children.begin(), node->children.end(), comparator);
+        return selected_child->get();
+    }
+};
+template<typename Node, typename Float = double>
+struct UBC1 : public SelectionPolicy<UBC1<Node, Float>, Node, Float> {
+    Float cp_;
+
+    explicit UBC1(Float cp) : cp_(cp) {}
+
+    Float value(Node *child, Node *parent) {
+        return child->reward + cp_ * std::sqrt(std::log(parent->visit_count) / child->visit_count);
+    }
+};
+
+template<typename Node, typename Float = double>
+struct EpsilonGreedy : public SelectionPolicy<EpsilonGreedy<Node, Float>, Node, Float> {
+    Float epsilon;
+
+    explicit EpsilonGreedy(Float epsilon) : epsilon(epsilon) {}
+
+    Float value(Node *child, Node *parent) {
+        return child->reward + epsilon * parent->visit_count / child->visit_count;
+    }
+};
+
+//// Helper function to calculate UCB1 score
+//template<typename Node, typename Integer>
+//double fn_ubc1(const Node &node, double Cp) {
+//    Integer parent_visits = static_cast<double>(node->parent->visits);
+//    return node->reward + Cp * std::sqrt(std::log(parent_visits) / node->visits);
+//}
+//
+//template<typename Node, typename Float>
+//double fn_epsilon_greedy(const Node &node, double epsilon) {
+//    return dist(engine) < epsilon ? std::numeric_limits<double>::max() : node.reward;
+//}
+//
+//// Helper function to calculate UCB1-Tuned score
+//template<typename Node, typename Float>
+//double fn_ubc1_tuned(const Node &node) {
+//    Float parent_visits  = static_cast<double>(node->parent->visits);
+//    Float child_variance = node->reward_variance + std::sqrt((2.0 * std::log(parent_visits)) / node->visits);
+//    return node->reward + std::sqrt((std::log(parent_visits) / node->visits) * std::min(0.25, child_variance));
+//}
+
+template<typename State, typename Action, typename Reward, typename Float = double>
+class MCTS : public MCTSBase<MCTS<State, Action, Reward, Float>, State, Action, Reward> {
+public:
+    using Base             = MCTSBase<MCTS<State, Action, Reward, Float>, State, Action, Reward>;
+    using p_node           = typename Base::p_node;
+    using node_type        = typename Base::node_type;
+    using trajectory       = std::vector<std::tuple<State, Action, Reward>>;
+    using state_transition = std::function<State(State &, Action)>;
+    using action_generator = std::function<std::vector<Action>(State &)>;
+    using selection_policy = std::function<node_type *(node_type *)>;
+    using is_terminal      = std::function<bool(State &)>;
+    using reward           = std::function<Reward(State &)>;
+
+    action_generator mfn_get_actions;// Function to get available actions for a state
+    state_transition mfn_transition; // Function to get new state after an action
+    is_terminal      mfn_is_terminal;// Function to check if a state is terminal
+    reward           mfn_reward;     // Function to get the reward of a state
+    selection_policy mfn_selection_policy;
+
+    std::mt19937 engine;
+
+    MCTS(State            initial_state,
+         Action           initial_action,
+         action_generator get_actions,
+         state_transition transition,
+         is_terminal      is_terminal,
+         reward           reward,
+         selection_policy selection_policy = UBC1<node_type, Float>(1.0),
+         size_t           seed             = std::random_device{}())
+        : Base(initial_state, initial_action),
+          mfn_get_actions(get_actions),
+          mfn_transition(transition),
+          mfn_is_terminal(is_terminal),
+          mfn_reward(reward),
+          mfn_selection_policy(selection_policy),
+          engine(seed) {}
+
+
+    node_type *get_root() {
+        return Base::root.get();
+    }
+
+    //    node_type *select_node(node_type *node) {
+    //        assert(!node->children.empty());// Ensure there are no nullptr in children
+    //
+    //        // Calculate total visits to all children nodes
+    //        unsigned int total_visits = 0;
+    //        for (const auto &child: node->children) {
+    //            total_visits += child->visit_count;
+    //        }
+    //
+    //        auto selected_child = std::max_element(
+    //                node->children.begin(), node->children.end(),
+    //                [total_visits](const auto &a, const auto &b) {
+    //                    double ucb1_a = a->reward / a->visit_count + std::sqrt(2 * std::log(total_visits) / a->visit_count);
+    //                    double ucb1_b = b->reward / b->visit_count + std::sqrt(2 * std::log(total_visits) / b->visit_count);
+    //                    return ucb1_a < ucb1_b;
+    //                });
+    //
+    //        return selected_child->get();
+    //    }
+
+    node_type *select_node(node_type *node) {
+        try {
+            // Use the select_child function of the selection policy to select a child node.
+            return mfn_selection_policy(node);
+
+        } catch (const std::exception &e) {
+            std::cerr << "Exception caught in select_node function: " << e.what() << std::endl;
+            return nullptr;
+        }
+    }
+
+    //    node_type *select_node(node_type *node) {
+    //        if (node->children.empty()) {
+    //            return nullptr;// Or handle this situation in some other way appropriate for your program.
+    //        }
+    //
+    //        // Ensure there are no nullptr in children
+    //        for (auto &child: node->children) {
+    //            if (child == nullptr) {
+    //                return nullptr;// Or handle this situation in some other way appropriate for your program.
+    //            }
+    //        }
+    //
+    //
+    //        //        std::cout << "Selecting node" << std::endl;
+    //        auto selected_child = std::max_element(
+    //                node->children.begin(),
+    //                node->children.end(),
+    //                [this](const auto &a, const auto &b) {
+    //                    try {
+    //                        auto a_val = mfn_selection_policy(a.get());
+    //                        auto b_val = mfn_selection_policy(b.get());
+    //                        return a_val < b_val;
+    //                    } catch (const std::exception &e) {
+    //                        std::cerr << "Exception caught in lambda function: " << e.what() << std::endl;
+    //                        return false;
+    //                    }
+    //                });
+    //        //                [this](const auto &a, const auto &b) {
+    //        //                    return mfn_selection_policy(a.get()) < mfn_selection_policy(b.get());
+    //        //                });
+    //        //        std::cout << "Selected node" << std::endl;
+    //        return selected_child->get();
+    //    }
+
+    void expand_all_actions(node_type *node) {
+        // Stop expanding if the node is terminal
+        if (mfn_is_terminal(node->state)) {
+            node->is_terminal = true;
+            return;
+        }
+
+        // Generate possible actions
+        auto possible_actions = mfn_get_actions(node->state);
+
+        // Expand node by creating children for all possible actions
+        for (auto const &action: possible_actions) {
+            State new_state = mfn_transition(node->state, action);
+
+            // Check for duplicate nodes
+            if (std::none_of(node->children.begin(), node->children.end(), [&](auto &child) { return child->state == new_state; })) {
+                auto child         = std::make_unique<node_type>(new_state, action, node);
+                child->visit_count = 1;
+                node->children.push_back(std::move(child));// take ownership of the child
+            }
+        }
+
+        // If the expansion resulted in no children (all actions lead to already existing states), mark the node as terminal
+        if (node->children.empty()) {
+            node->is_terminal = true;
+        }
+    }
+
+    //    void
+    //    expand_node(node_type *node) {
+    //        // Stop expanding if the node is terminal
+    //        if (mfn_is_terminal(node->state)) {
+    //            node->is_terminal = true;
+    //            //            return node;
+    //        }
+    //
+    //        // Generate possible actions
+    //        auto possible_actions = mfn_get_actions(node->state);
+    //
+    //        // Expand node by creating children for all possible actions
+    //        for (auto const &action: possible_actions) {
+    //            State new_state = mfn_transition(node->state, action);
+    //
+    //            // Check for duplicate nodes
+    //            if (std::none_of(node->children.begin(), node->children.end(), [&](auto &child) { return child->state == new_state; })) {
+    //                auto child = std::make_unique<node_type>(new_state, action, node);
+    //                node->children.push_back(std::move(child));// take ownership of the child
+    //            }
+    //        }
+    //
+    //        // If the expansion resulted in no children (all actions lead to already existing states), mark the node as terminal
+    //        if (node->children.empty()) {
+    //            node->is_terminal = true;
+    //        }
+    //    }
+
+    void expand_node(node_type *node) {
+        // Stop expanding if the node is terminal
+        if (mfn_is_terminal(node->state)) {
+            node->is_terminal = true;
+            return;
+        }
+
+        // Generate possible actions
+        auto possible_actions = mfn_get_actions(node->state);
+
+        // Filter the possible actions to exclude those that would lead to duplicate nodes
+        auto filtered_actions = possible_actions | std::views::filter([&](auto &action) {
+                                    State new_state = mfn_transition(node->state, action);
+                                    return std::none_of(node->children.begin(), node->children.end(), [&](auto &child) { return child->state == new_state; });
+                                });
+
+        // Convert the filtered range into a vector
+        std::vector<Action> unique_actions(begin(filtered_actions), end(filtered_actions));
+
+        // If all actions have been removed (i.e., all lead to existing states), mark the node as terminal
+        if (unique_actions.empty()) {
+            node->is_terminal = true;
+            return;
+        }
+
+        // Create a uniform integer distribution to select one of the remaining possible actions at random
+        std::uniform_int_distribution<int> dist(0, unique_actions.size() - 1);
+
+        // Select one of the possible actions at random
+        auto action = unique_actions[dist(engine)];
+
+        State new_state = mfn_transition(node->state, action);
+
+        auto child = std::make_unique<node_type>(new_state, action, node);
+        node->children.push_back(std::move(child));// take ownership of the child
+    }
+
+
+    node_type *best_child(node_type *node) const {
+        return std::max_element(
+                       node->children.begin(), node->children.end(),
+                       [](const p_node &a, const p_node &b) {
+                           return a->reward < b->reward;
+                       })
+                ->get();
+    }
+
+    trajectory get_best_trajectory(node_type *node) const {
+        trajectory trajectory;
+
+        // Descend through the tree to the best leaf node.
+        while (!node->is_leaf()) {
+            node = best_child(node);
+
+            // Add the state, action, and result associated with the node to the trajectory.
+            trajectory.emplace_back(node->state, node->action, node->reward);
+        }
+
+        return trajectory;
+    }
+
+    //    void expand_all_actions(node_type *node) {
+    //        // Stop expanding if the node is terminal
+    //        if (mfn_is_terminal(node->state)) {
+    //            node->is_terminal = true;
+    //            //            return node;
+    //        }
+    //
+    //        // Generate possible actions
+    //        auto possible_actions = mfn_get_actions(node->state);
+    //
+    //        // Expand node by creating children for all possible actions
+    //        for (auto const &action: possible_actions) {
+    //            State new_state = mfn_transition(node->state, action);
+    //
+    //            // Check for duplicate nodes
+    //            if (std::none_of(node->children.begin(), node->children.end(), [&](auto &child) { return child->state == new_state; })) {
+    //                auto child = std::make_unique<node_type>(new_state, action, node);
+    //                node->children.push_back(std::move(child));// take ownership of the child
+    //            }
+    //        }
+    //
+    //        // If the expansion resulted in no children (all actions lead to already existing states), mark the node as terminal
+    //        if (node->children.empty()) {
+    //            node->is_terminal = true;
+    //        }
+    //
+    //        // Recursively expand all children
+    //        for (auto &child: node->children) {
+    //            expand_all_actions(child.get());
+    //        }
+    //    }
+
+
+    trajectory search(int iterations) {
+        // Initial root expansion
+        if (this->root->children.empty()) {
+            ODIN_LOG_INFO << "Root node children are empty. Expanding all actions.";
+            expand_all_actions(this->root.get());
+        }
+
+        while (iterations--) {
+            ODIN_VLOG(20) << "Iteration: " << iterations;
+
+            // 1. Selection
+            // Start from the root node and use the selection policy to descend through the tree,
+            // until reaching a leaf node that hasn't been expanded yet.
+            node_type *node = this->root.get();
+
+            while (!node->is_leaf()) {
+                node = select_node(node);
+                ODIN_VLOG(40) << "Selected node: " << node->state;
+            }
+
+            // 2. Expansion
+            // For the selected leaf node, compute all possible actions from its state and add a
+            // new child node for each action to the tree.
+            ODIN_LOG_INFO << "Expanding node: " << node->state;
+            expand_node(node);
+
+            // 3. Simulation
+            // For each child node of the newly expanded node, simulate a trajectory from the child
+            // node's state to a terminal state. Each state-action-result triplet in the trajectory
+            // is added to the tree as a child node of the preceding state. This results in a chain
+            // of nodes representing the simulated trajectory. The final state of the trajectory is
+            // a terminal state, and the associated result is backpropagated up through the chain
+            // of nodes.
+            // The 'Simulation' step in `search_impl`
+            for (auto &unique_child_node: node->children) {
+                //                std::cout << "Simulating node: " << unique_child_node->state << std::endl;
+                // Obtain a raw pointer to the child_node for use within this scope.
+                node_type *child_node = unique_child_node.get();
+                ODIN_LOG_INFO << "Simulating node: " << child_node->state;
+
+                // Perform a simulation from the child node's state and append the trajectory to the child node.
+                const trajectory trajectory = simulate(child_node->state);
+
+                // Expand the tree along the simulated trajectory.
+                node_type *terminal_node = expand_trajectory(child_node, trajectory);
+
+                // 4. Backpropagation
+                // Backpropagate the result of the simulated trajectory up the tree through all
+                // parent nodes, starting with the terminal node and up to the child node.
+                ODIN_LOG_INFO << "Backpropagating from node: " << terminal_node->state;
+                backpropagate(terminal_node, terminal_node->reward);
+
+                //                for (node_type *current_node = terminal_node; current_node != child_node; current_node = current_node->parent) {
+                //
+                //                    //                    std::cout << "Backpropagating node: " << current_node->state << std::endl;
+                //                    backpropagate(current_node, current_node->reward);
+                //                }
+            }
+
+            // Step 5: Contraction
+            // Based on an extension to the four steps of MCTS (selection, expansion, simulation, backpropagation),
+            // introduced by Hennes and Izzo in "Interplanetary Trajectory Planning with Monte Carlo Tree Search"
+            // (IJCAI 2015), we include a contraction step.
+            //
+            // This step is particularly relevant for trajectory planning problems that span a very broad tree,
+            // with a high branching factor and limited depth. For such problems, the internal tree of the MCTS
+            // is often able to reach final nodes. When a subtree of the internal tree fully covers the corresponding
+            // problem search space (i.e., each child has been played at least once and all leaves are terminal states),
+            // it can be ignored in further search iterations.
+            //
+            // By removing such subtrees from the internal tree, the contraction step helps to keep the tree compact
+            // and manageable across multiple iterations, enhancing the overall performance of the algorithm.
+            //
+            // Reference:
+            // Hennes, D., & Izzo, D. (2015). Interplanetary Trajectory Planning with Monte Carlo Tree Search.
+            // In Proceedings of the Twenty-Fourth International Joint Conference on Artificial Intelligence (IJCAI 2015).
+            // European Space Agency, Advanced Concepts Team, Noordwijk, The Netherlands.
+            ODIN_LOG_INFO << "Contracting tree from root node: " << this->root->state;
+            //            contract(this->root.get());
+        }
+
+        // After time limit is reached, return the best node from the root according to a policy (e.g., the node with the highest value).
+        ODIN_LOG_INFO << "Returning best trajectory from root node: " << this->root->state;
+        return get_best_trajectory(this->root.get());
+    }
+
+
+private:
+    // Expands the tree along a simulated trajectory by creating a chain of nodes.
+    // The chain starts from a given node (initially an unexpanded leaf node) and
+    // extends to a terminal node representing the end of a simulated trajectory.
+    node_type *expand_trajectory(node_type *node, const std::vector<std::tuple<State, Action, Reward>> &trajectory) {
+        // Iterate over each state-action-result triplet in the simulated trajectory.
+        for (const auto &[state, action, reward]: trajectory) {
+            // Create a new node for each triplet.
+            // The parent of each new node is set to the preceding node in the trajectory.
+            // `std::make_unique` is used to create a new unique_ptr object that takes ownership of the new node.
+            auto new_node = std::make_unique<node_type>(state, action, node, reward);
+
+            // Add the new node to the list of children of the preceding node.
+            // `std::move` is used to transfer ownership of the new node from the unique_ptr to the child list.
+            node->children.push_back(std::move(new_node));
+
+            // Update `node` to point to the new node, making it the "current" node for the next iteration.
+            node = node->children.back().get();
+        }
+
+        // After all triplets in the trajectory have been processed, `node` points to the terminal node of the trajectory.
+        // Return a raw pointer to the terminal node.
+        return node;
+    }
+
+    void contract(node_type *node) {
+        for (auto it = node->children.begin(); it != node->children.end();) {
+            if (all_children_terminal(it->get())) {
+                it = node->children.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto &child: node->children) {
+            contract(child.get());
+        }
+    }
+
+    bool all_children_terminal(node_type *node) {
+        for (auto &child: node->children) {
+            if (!mfn_is_terminal(child->state) || child->children.empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+    trajectory simulate(State state) {
+        std::vector<std::tuple<State, Action, Reward>> trajectory;
+        while (!mfn_is_terminal(state)) {
+            std::vector<Action> actions = mfn_get_actions(state);
+
+            // Create a uniform distribution from 0 to size - 1
+            std::uniform_int_distribution<size_t> distribution(0, actions.size() - 1);
+
+            // Generate a random number using the distribution and the generator
+            Action action = actions[distribution(engine)];
+            state         = mfn_transition(state, action);// Apply the action to get the new state
+            Reward reward = mfn_reward(state);            // Compute the reward for the current state
+            trajectory.emplace_back(state, action, reward);
+        }
+        //        // make last state terminal
+        //        trajectory.back() = std::make_tuple(state, std::get<1>(trajectory.back()), 0);
+        return trajectory;
+    };
+
+    //    void backpropagate(node_type *node, Reward reward) {
+    //        // Start from the given node and traverse up the tree
+    //        while (node) {
+    //            // Increment the visit count of the node
+    //            node->visit_count++;// TODO: with the multiple leaf expansion, this will throw off the selection policies original intended behaviours
+    //                                // .... actually it wont, we must just make sure not to have the expanded node visited for the number of parallel simulations
+    //
+    //            // Update the value of the node based on the result
+    //            node->reward += reward;
+    //
+    //            // Move to the parent of the current node
+    //            node = node->parent;
+    //        }
+
+    //    void backpropagate(node_type *node, Reward final_reward) {
+    //        // Start from the given node and traverse up the tree
+    //        while (node) {
+    //            // Increment the visit count of the node
+    //            node->visit_count++;
+    //
+    //            // Update the value of the node
+    //            // Keep track of the max reward encountered so far
+    //            node->reward = std::max(node->reward, final_reward);
+    //
+    //            // Move to the parent of the current node
+    //            node = node->parent;
+    //        }
+    //    }
+    void backpropagate(node_type *node, Reward final_reward) {
+        // Start from the given node and traverse up the tree
+        //        int         depth           = node->depth;// The depth of the current node
+        //        const Float discount_factor = 0.99;       // The discount factor for future rewards
+        while (node) {
+            // Increment the visit count of the node
+            node->visit_count++;
+
+            // Update the value of the node
+            // Apply the discount factor to the reward
+            node->reward = std::max(node->reward, final_reward);
+
+            //            node->reward = std::max(node->reward, final_reward * std::pow(discount_factor, depth));
+
+            // Move to the parent of the current node
+            node = node->parent;
+
+            // Increase the depth for the next step back in time
+            //            depth++;
+        }
+    }
+    //    }
+};
+
+#endif//MCTS_HPP

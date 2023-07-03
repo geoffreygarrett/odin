@@ -1,0 +1,43 @@
+# .bazelrc
+
+# These options are effective in all Bazel commands executed in this workspace.
+
+# Set the C++ language version to C++20.
+build --cxxopt=-std=c++20
+
+# Specifies the number of concurrent jobs that Bazel will try to execute.
+build --jobs=20
+
+# Building with optimization and verbose on failures.
+build -c opt --verbose_failures
+
+
+# Set test output to be streamed directly to the console.
+test --test_output=all
+test --test_summary=detailed
+
+#run --experimental_enable_bzlmod
+#--test_output=<summary, errors, all or streamed> default: "summary"
+#Specifies desired output mode. Valid values are 'summary' to output only test status summary,
+# 'errors' to also print test logs for failed tests, 'all' to print logs for all tests and
+# 'streamed' to output logs for all tests in real time (this will force tests to be executed locally one at a time regardless of --test_strategy value).
+#Tags: test_runner, terminal_output, execution
+#--test_summary=<short, terse, detailed, none or testcase> default: "short"
+#Specifies the desired format of the test summary. Valid values are 'short' to print information only about tests executed, 'terse', to print information only about unsuccessful tests that were run, 'detailed' to print detailed information about failed test cases, 'testcase' to print summary in test case resolution, do not print detailed information about failed test cases and 'none' to omit the summary.
+#Tags: terminal_output
+
+# Setting disk cache directory.
+#build --disk_cache=~/.cache/bazel
+
+# CPU setting for target and host machines.
+# You should replace 'k8' with the appropriate value for your system.
+#build --cpu=k8
+#build --host_cpu=k8
+
+# Enable debug outputs for sandboxing.
+build --sandbox_debug
+#build --copt=-Dredacted='\\\"redacted\\\"'
+
+# Debug test with environment variable for shared libraries.
+#test -c dbg --test_env=LD_LIBRARY_PATH=/usr/local/lib
+

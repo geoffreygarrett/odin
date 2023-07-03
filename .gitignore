@@ -1,0 +1,64 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.ko
+*.obj
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+*.ipa
+*.dll
+
+# Python related
+*.py[cod]
+*~
+__pycache__/
+
+# Bazel build
+/bazel-*
+*.runfiles/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+CMakeScripts/
+cmake_install.cmake
+CTestTestfile.cmake
+_install_manifest.txt
+compile_commands.json
+Makefile
+*.cmake
+
+# Clion IDE
+.idea/
+
+# Logs and databases
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

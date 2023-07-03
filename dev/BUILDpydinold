@@ -1,0 +1,200 @@
+load("@//:bazel/pybind11/build_defs.bzl", "pybind_extension")
+load(
+    "@pip//:requirements.bzl",
+    "data_requirement",
+    "dist_info_requirement",
+    "entry_point",
+    "requirement",
+)
+
+filegroup(
+    name = "pydin_headers",
+    srcs = glob([
+        "include/**/*.hpp",
+        "include/**/*.h",
+        "include/**/*.cuh",
+    ]),
+)
+
+cc_library(
+    name = "pydin_header_lib",
+    hdrs = [
+        ":pydin_headers",
+    ],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//:odin",
+    ],
+)
+
+## Unpack tar file to specific directory
+#genrule(
+#    name = "unpack-pybind11-stubs",
+#    srcs = [":pybind11-stubs-archive"],
+#    outs = ["*"],
+#    cmd = """
+#        mkdir -p $(@D)
+#        tar -xf $(location :pybind11-stubs-archive) -C $(@D)
+#    """,
+#)
+
+pybind_extension(
+    name = "core",
+    srcs = ["core.cpp"],
+    #    cmd = """
+    #            OUT_DIR=$$(realpath $(@D)/stubs)
+    #            mkdir -p $$OUT_DIR
+    #            PYTHONPATH=$$(dirname $(location :core.so)) $(execpath :pybind11-stubgen) core -o $$OUT_DIR --no-setup-py
+    #            tar -cf $(@D)/pybind11-stubs.tar -C $$OUT_DIR .
+    #        """,
+    defines = [
+        "PYBIND11_DETAILED_ERROR_MESSAGES",
+        "ODIN_USE_GLOG",
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+    ],
+    includes = ["pydin/include"],
+    linkopts = ["-fopenmp"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":pydin_header_lib",
+        "//:glog",
+        "//:tbb",
+    ],
+)
+
+alias(
+    name = "pybind11-stubgen",
+    actual = entry_point("pybind11-stubgen", "pybind11-stubgen"),
+)
+
+genrule(
+    name = "pybind11-stubs-archive",
+    srcs = [":core.so"],
+    outs = ["pybind11-stubs.tar"],
+    cmd = """
+        OUT_DIR=$$(realpath $(@D)/stubs)
+        mkdir -p $$OUT_DIR
+        PYTHONPATH=$$(dirname $(location :core.so)) $(execpath :pybind11-stubgen) core -o $$OUT_DIR --no-setup-py
+        tar -cf $(@D)/pybind11-stubs.tar -C $$OUT_DIR .
+    """,
+    tools = [
+        ":pybind11-stubgen",
+    ],
+)
+
+sh_binary(
+    name = "unpack-stubs",
+    srcs = ["unpack-stubs.sh"],
+    data = [":pybind11-stubs-archive"],
+)
+
+genrule(
+    name = "setup",
+    outs = ["setup.py"],
+    cmd = """
+echo "from setuptools import setup, find_packages
+
+setup(
+    name='pydin',
+    version='0.1',
+    packages=find_packages(),
+    package_data={
+        'pydin': ['*.so'],
+    },
+    install_requires=[
+        'numpy',
+        'pandas',
+    ],
+)" > $(OUTS)
+""",
+)
+
+# Assuming gen_build.sh generates a BUILD file at //my/build/location:BUILD.bazel,
+# and that file defines a target named "generated_files"
+
+genrule(
+    name = "init",
+    outs = ["__init__.py"],
+    cmd = "echo 'from .core import float32, float64, float128' > $@; echo 'from .core import *' >> $@",
+)
+
+#alias(
+#    name = "stubgen",
+#    actual = entry_point("mypy", "stubgen"),
+#)
+
+#genrule(
+#    name = "stubs",
+#    srcs = [":core.so"],
+#    outs = ["core.pyi"],
+#    cmd = """
+#        TEMPDIR=$$(mktemp -d)
+#        PYTHONPATH=$$(dirname $(location :core.so)) python3 $(execpath :stubgen) -m core -o $$TEMPDIR
+#        mv $$TEMPDIR/* $@
+#    """,
+#    tools = [
+#        requirement("mypy"),
+#        ":pybind11-stubgen",
+#        ":stubgen",
+#        requirement("typing_extensions"),
+#        requirement("tomli"),
+#        requirement("mypy_extensions"),
+#    ],
+#)
+
+py_library(
+    name = "pydin",
+    srcs = glob(["__init__.py"]),
+    data = [
+        ":core.so",
+        ":init",
+        ":setup",
+    ],
+    imports = ["."],
+    visibility = ["//visibility:public"],
+    deps = [
+        requirement("numpy"),
+        requirement("pandas"),
+    ],
+)
+
+py_binary(
+    name = "foo_test",
+    srcs = ["foo_test.py"],
+    python_version = "PY3",
+    deps = [
+        ":pydin",
+    ],
+)
+
+load("@rules_pkg//:pkg.bzl", "pkg_tar", "pkg_zip")
+
+filegroup(
+    name = "all_files",
+    srcs = [
+        ":core.so",
+        ":init",
+        ":pybind11-stubs-archive",
+        ":pydin",
+        ":setup",
+        ":unpack-stubs",
+    ],
+)
+
+pkg_tar(
+    name = "pydin_tar",
+    srcs = [
+        ":all_files",
+    ],
+    extension = "tar.gz",
+    strip_prefix = "/",
+)
+
+pkg_zip(
+    name = "pydin_zip",
+    srcs = [
+        ":all_files",
+    ],
+    strip_prefix = "/",
+)
