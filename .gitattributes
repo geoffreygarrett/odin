@@ -1,0 +1,5 @@
+*.bzl linguist-vendored
+*.bazel linguist-vendored
+*.html linguist-vendored
+BUILD linguist-vendored
+*.cmake linguist-vendored
