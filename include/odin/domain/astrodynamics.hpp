@@ -374,9 +374,10 @@ auto sample_anomalies(Float e, int n_points, ConversionFunc conversion) {
 
     // Create a range, perform conversion
     // TODO: See if this is actually possible with LLVM 15/16. It's a bit of a hassle right now.
-//    auto anomalies = std::views::iota(0, n_points)
-//                   | std::views::transform([=](int i) { return i * step; })// Anomalies
-//                   | std::views::transform(conversion);                    // Perform conversion
+    //    auto anomalies = std::views::iota(0, n_points)
+    //                   | std::views::transform([=](int i) { return i * step; })// Anomalies
+    //                   | std::views::transform(conversion);                    // Perform conversion
+
     std::vector<Float> anomalies(n_points);
     for (int i = 0; i < n_points; i++) {
         Float anomaly = i * step;  // Anomalies
