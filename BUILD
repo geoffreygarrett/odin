@@ -53,14 +53,11 @@ cc_library(
     hdrs = [
         ":odin_headers",
     ],
-    copts = [
-        "-std=c++20",
-    ],
     includes = ["include"],
     visibility = ["//visibility:public"],
     deps = [
         ":cereal",
-        ":eigen",
+        "@com_github_eigen_eigen//:header_lib",
     ],
 )
 

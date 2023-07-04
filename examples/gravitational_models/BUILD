@@ -1,7 +1,6 @@
 cc_binary(
     name = "tri_axial_ellipsoidal_1",
     srcs = ["tri_axial_ellipsoidal_1.cpp"],
-    copts = ["-std=c++20"],
     defines = [
         "ODIN_USE_GLOG",
         "GLOG_CUSTOM_PREFIX_SUPPORT",
@@ -22,7 +21,6 @@ cc_binary(
 cc_binary(
     name = "tri_axial_ellipsoidal_2",
     srcs = ["tri_axial_ellipsoidal_2.cpp"],
-    copts = ["-std=c++20"],
     defines = [
         "ODIN_USE_GLOG",
         "GLOG_CUSTOM_PREFIX_SUPPORT",

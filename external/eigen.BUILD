@@ -18,7 +18,7 @@ filegroup(
 )
 
 cc_library(
-    name = "eigen_header_lib",
+    name = "header_lib",
     hdrs = [":eigen_headers"],
     # We don't need to include the sources here, because this library
     # is a header-only library. CMake is just used for testing etc.
@@ -30,14 +30,14 @@ cc_library(
 # to build with a cmake target. So we create a cmake target that
 # performs the installation of the headers and cmake configs.
 cmake(
-    name = "eigen",
+    name = "eigen_cmake",
     lib_source = ":eigen_sources",
     includes = ["."],
     out_include_dir = "",
     out_headers_only = True,  # Flag variable to indicate that the library produces only headers
     install = True,
     deps = [
-        ":eigen_header_lib",
+        ":header_lib",
     ],
     cache_entries = {
         #        "CMAKE_INSTALL_DATADIR": "lib","$$EXT_BUILD_DEPS$$/eigen_cmake/share/eigen3/cmake"
@@ -53,11 +53,11 @@ cmake(
 #     visibility = ["//visibility:public"],
 # )
 
-#cc_library(
-#    name = "eigen",
-#    hdrs = [":eigen_cmake"],
-#    # We don't need to include the sources here, because this library
-#    # is a header-only library. CMake is just used for testing etc.
-#    visibility = ["//visibility:public"],
-#    includes = ["."],
-#)
+cc_library(
+    name = "eigen",
+    hdrs = [":eigen_cmake"],
+    # We don't need to include the sources here, because this library
+    # is a header-only library. CMake is just used for testing etc.
+    visibility = ["//visibility:public"],
+    includes = ["."],
+)
