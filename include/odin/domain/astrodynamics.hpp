@@ -47,13 +47,13 @@ Float anomaly_eccentric_to_true(Float E, Float e) {
 template<typename Float>
 Float anomaly_mean_to_eccentric(Float M, Float e, int max_iter = 1000, Float tolerance = 1e-6) {
     // improved initial guess
-    Float E = (e < Float(0.8)) ? M : Float(M_PI);
+    Float E = (e < Float(0.8)) ? M : PI<Float>;
     Float delta = std::numeric_limits<Float>::max();
     int iter = 0;
 
     // Newton-Raphson method to solve Kepler's equation
     while (delta > tolerance && iter < max_iter) {
-        Float E_next = E - (E - e * std::sin(E) - M) / (Float(1) - e * std::cos(E));
+        Float E_next = E - (E - e * std::sin(E) - M) / (Float(1.) - e * std::cos(E));
         delta = std::abs(E_next - E);
         E = E_next;
         ++iter;
@@ -370,7 +370,7 @@ coe2rv(
 
 template<typename Float, typename ConversionFunc>
 auto sample_anomalies(Float e, int n_points, ConversionFunc conversion) {
-    Float step = 2 * M_PI / (n_points - 1);
+    Float step = 2 * PI<Float>; / (n_points - 1);
 
     // Create a range, perform conversion
     // TODO: See if this is actually possible with LLVM 15/16. It's a bit of a hassle right now.
