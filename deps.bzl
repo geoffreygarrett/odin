@@ -104,6 +104,7 @@ def odin_dependencies():
         name = "com_github_oneapi_onetbb",
         sha256 = "fcebb93cb9f7e882f62cd351b1c093dbefdcae04b616227dc716b0a5efa9e8ab",
         strip_prefix = "oneTBB-2021.9.0",
+        build_file = "//:external/tbb.BUILD",
         urls = ["https://github.com/oneapi-src/oneTBB/archive/v2021.9.0.zip"],
     )
 
