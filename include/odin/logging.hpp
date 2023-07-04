@@ -179,6 +179,7 @@ static NullStream nullstream;
 #define INIT_ODIN_LOGGING(NAME, LOG_DIR) (void) 0
 #define ODIN_IF_LOGGING_ENABLED(x) ((void) 0)
 #define ODIN_IF_VERBOSITY_MATCHES(verbosity, x) ""
+#define ODIN_SET_LOG_DESTINATION(LEVEL, DESTINATION) (void) 0
 
 #endif// ODIN_USE_GLOG
 
