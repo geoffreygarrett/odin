@@ -17,7 +17,7 @@
 
 
 template<typename Float>
-Float PI = Float(M_PI);
+Float PI = static_cast<Float>(3.14159265358979323846264338327950288419716939937510L);
 
 
 template<typename Float>
