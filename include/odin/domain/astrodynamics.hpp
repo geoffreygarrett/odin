@@ -370,7 +370,7 @@ coe2rv(
 
 template<typename Float, typename ConversionFunc>
 auto sample_anomalies(Float e, int n_points, ConversionFunc conversion) {
-    Float step = 2 * PI<Float>; / (n_points - 1);
+    Float step = 2 * PI<Float> / (n_points - 1);
 
     // Create a range, perform conversion
     // TODO: See if this is actually possible with LLVM 15/16. It's a bit of a hassle right now.
