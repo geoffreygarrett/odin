@@ -8,7 +8,7 @@
 #include <memory>
 #include <odin/logging.hpp>
 #include <random>
-#include <ranges>
+//#include <ranges>
 #include <stack>
 #include <variant>
 #include <vector>
@@ -60,10 +60,10 @@ class UCB1 : public SelectionPolicy<Node, Float> {
     Float m_cp;
 
 public:
-    using value_estimator_type = SelectionPolicy<Node, Float>::value_estimator_type;
+    using value_estimator_type = typename SelectionPolicy<Node, Float>::value_estimator_type;
 
     UCB1(Float cp, value_estimator_type value_estimator)
-        : SelectionPolicy<Node, Float>(value_estimator), m_cp(cp) {}
+            : SelectionPolicy<Node, Float>(value_estimator), m_cp(cp) {}
 
     Float get_cp() const {
         return m_cp;
@@ -79,10 +79,10 @@ class UCB1Tuned : public SelectionPolicy<Node, Float> {
     Float m_cp;
 
 public:
-    using value_estimator_type = SelectionPolicy<Node, Float>::value_estimator_type;
+    using value_estimator_type = typename SelectionPolicy<Node, Float>::value_estimator_type;
 
     UCB1Tuned(Float cp, value_estimator_type value_estimator)
-        : SelectionPolicy<Node, Float>(value_estimator), m_cp(cp) {}
+            : SelectionPolicy<Node, Float>(value_estimator), m_cp(cp) {}
 
     Float get_cp() const {
         return m_cp;
@@ -90,7 +90,8 @@ public:
 
     Float value(Node *child, Node *parent) override {
         Float Vi = child->reward_stats.variance() + std::sqrt(2 * std::log(parent->visit_count) / child->visit_count);
-        return this->mfn_value_estimator(child) + m_cp * std::sqrt(std::log(parent->visit_count) / child->visit_count * std::min(0.25, Vi));
+        return this->mfn_value_estimator(child) +
+               m_cp * std::sqrt(std::log(parent->visit_count) / child->visit_count * std::min(0.25, Vi));
     }
 };
 
@@ -99,10 +100,10 @@ class EpsilonGreedy : public SelectionPolicy<Node, Float> {
     Float m_epsilon;
 
 public:
-    using value_estimator_type = SelectionPolicy<Node, Float>::value_estimator_type;
+    using value_estimator_type = typename SelectionPolicy<Node, Float>::value_estimator_type;
 
     explicit EpsilonGreedy(Float epsilon, value_estimator_type value_estimator)
-        : SelectionPolicy<Node, Float>(value_estimator), m_epsilon(epsilon) {}
+            : SelectionPolicy<Node, Float>(value_estimator), m_epsilon(epsilon) {}
 
     Float get_epsilon() const {
         return m_epsilon;
@@ -117,43 +118,43 @@ public:
 template<typename State, typename Action, typename Reward, typename Float = double>
 class MCTS : public MCTSBase<MCTS<State, Action, Reward, Float>, State, Action, Reward> {
 public:
-    using Base             = MCTSBase<MCTS<State, Action, Reward, Float>, State, Action, Reward>;
-    using p_node           = typename Base::p_node;
-    using node_type        = typename Base::node_type;
-    using trajectory_type  = std::vector<std::tuple<State, std::optional<Action>, Reward>>;
+    using Base = MCTSBase<MCTS<State, Action, Reward, Float>, State, Action, Reward>;
+    using p_node = typename Base::p_node;
+    using node_type = typename Base::node_type;
+    using trajectory_type = std::vector<std::tuple<State, std::optional<Action>, Reward>>;
     using state_transition = std::function<State(State, Action)>;
     using action_generator = std::function<std::vector<Action>(State &)>;
     using selection_policy = std::shared_ptr<SelectionPolicy<node_type, Float>>;
-    using is_terminal      = std::function<bool(State &)>;
-    using reward           = std::function<Reward(State &)>;
+    using is_terminal = std::function<bool(State &)>;
+    using reward = std::function<Reward(State &)>;
 
     action_generator mfn_get_actions;// Function to get available actions for a state
     state_transition mfn_transition; // Function to get new state after an action
-    is_terminal      mfn_is_terminal;// Function to check if a state is terminal
-    reward           mfn_reward;     // Function to get the reward of a state
+    is_terminal mfn_is_terminal;// Function to check if a state is terminal
+    reward mfn_reward;     // Function to get the reward of a state
     selection_policy mfn_selection_policy;
 
     std::mt19937 engine;
 
 
-    MCTS(State                 initial_state,
-         action_generator      get_actions,
-         state_transition      transition,
-         is_terminal           is_terminal,
-         reward                reward,
-         selection_policy      selection_policy = std::make_shared<UCB1<node_type, Float>>(1.0,
+    MCTS(State initial_state,
+         action_generator get_actions,
+         state_transition transition,
+         is_terminal is_terminal,
+         reward reward,
+         selection_policy selection_policy = std::make_shared<UCB1<node_type, Float>>(1.0,
                                                                                       [](const node_type *node) {
                                                                                           return node->reward_stats.max();
                                                                                       }),
-         size_t                seed             = std::random_device{}(),
-         std::optional<Action> initial_action   = std::nullopt)// actions are generally assigned by the environment through the process
-        : Base(initial_state, std::nullopt),                 // use std::nullopt as the initial action
-          mfn_get_actions(get_actions),
-          mfn_transition(transition),
-          mfn_is_terminal(is_terminal),
-          mfn_reward(reward),
-          mfn_selection_policy(std::move(selection_policy)),
-          engine(seed) {}
+         size_t seed = std::random_device{}(),
+         std::optional<Action> initial_action = std::nullopt)// actions are generally assigned by the environment through the process
+            : Base(initial_state, std::nullopt),                 // use std::nullopt as the initial action
+              mfn_get_actions(get_actions),
+              mfn_transition(transition),
+              mfn_is_terminal(is_terminal),
+              mfn_reward(reward),
+              mfn_selection_policy(std::move(selection_policy)),
+              engine(seed) {}
 
 
     node_type *get_root() {
@@ -188,7 +189,10 @@ public:
                 State new_state = mfn_transition(node->state, action);
 
                 // Check for duplicate nodes
-                if (std::none_of(node->children.begin(), node->children.end(), [&](const std::unique_ptr<node_type> &child) { return child != nullptr && child->state == new_state; })) {
+                if (std::none_of(node->children.begin(), node->children.end(),
+                                 [&](const std::unique_ptr<node_type> &child) {
+                                     return child != nullptr && child->state == new_state;
+                                 })) {
                     auto reward_stats = RunningStats<Reward>{};
                     reward_stats.set_calc_max(true);
                     auto child = std::make_unique<node_type>(new_state, action, node, reward_stats);
@@ -221,15 +225,36 @@ public:
         // If no actions are possible, mark the node as terminal
         if (possible_actions.empty()) {
             node->is_terminal = true;
-            node->is_leaf     = false;
+            node->is_leaf = false;
             return nullptr;
         }
 
+
         // Filter the possible actions to exclude those that would lead to duplicate nodes
-        auto filtered_actions = possible_actions | std::views::filter([&](auto &action) {
-                                    State new_state = mfn_transition(node->state, action);
-                                    return std::none_of(node->children.begin(), node->children.end(), [&](auto &child) { return child->state == new_state; });
-                                });
+        // TODO: See if this is actually possible with LLVM 15/16. It's a bit of a hassle right now.
+
+//        auto filtered_actions = possible_actions | std::views::filter([&](auto &action) {
+//            State new_state = mfn_transition(node->state, action);
+//            return std::none_of(node->children.begin(), node->children.end(),
+//                                [&](auto &child) { return child->state == new_state; });
+//        });
+        std::vector<typename decltype(possible_actions)::value_type> filtered_actions;
+
+        for (const auto &action: possible_actions) {
+            State new_state = mfn_transition(node->state, action);
+            bool is_duplicate = false;
+
+            for (const auto &child: node->children) {
+                if (child->state == new_state) {
+                    is_duplicate = true;
+                    break;
+                }
+            }
+
+            if (!is_duplicate) {
+                filtered_actions.push_back(action);
+            }
+        }
 
         // Convert the filtered range into a vector
         std::vector<Action> unique_actions(begin(filtered_actions), end(filtered_actions));
@@ -237,7 +262,7 @@ public:
         // If all actions have been removed (i.e., all lead to existing states), mark the node as terminal
         if (unique_actions.empty()) {
             node->is_terminal = true;
-            node->is_leaf     = false;
+            node->is_leaf = false;
             return nullptr;
         }
 
@@ -250,7 +275,7 @@ public:
         State new_state = mfn_transition(node->state, action);
 
         RunningStats<Reward> reward_stats;
-        auto                 child = std::make_unique<node_type>(new_state, action, node, reward_stats);
+        auto child = std::make_unique<node_type>(new_state, action, node, reward_stats);
         //        child->is_leaf = true; // Nodes are instantiated as leaves by default.
         node->children.push_back(std::move(child));// take ownership of the child
 
@@ -260,10 +285,10 @@ public:
 
     node_type *best_child(node_type *node) const {
         return std::max_element(
-                       node->children.begin(), node->children.end(),
-                       [](const p_node &a, const p_node &b) {
-                           return a->reward_stats.max() < b->reward_stats.max();
-                       })
+                node->children.begin(), node->children.end(),
+                [](const p_node &a, const p_node &b) {
+                    return a->reward_stats.max() < b->reward_stats.max();
+                })
                 ->get();
     }
 
@@ -287,13 +312,14 @@ public:
     //        }
 
 
-    trajectory_type search(int iterations = 1e3, double seconds = -1.0, bool expand_all = false, bool contraction = true) {
+    trajectory_type
+    search(int iterations = 1e3, double seconds = -1.0, bool expand_all = false, bool contraction = true) {
         using namespace std::chrono;
 
         auto start_time = steady_clock::now();
-        auto end_time   = (seconds < 0.0)
-                                ? time_point<steady_clock, duration<double>>(duration<double>::max())
-                                : start_time + std::chrono::seconds(static_cast<int>(seconds));
+        auto end_time = (seconds < 0.0)
+                        ? time_point < steady_clock, duration < double >> (duration<double>::max())
+                        : start_time + std::chrono::seconds(static_cast<int>(seconds));
 
 
         for (int i = 0; i < iterations && steady_clock::now() < end_time; ++i) {
@@ -463,7 +489,7 @@ private:
 
             // Generate a random number using the distribution and the generator
             Action action = actions[distribution(engine)];
-            state         = mfn_transition(state, action);// Apply the action to get the new state
+            state = mfn_transition(state, action);// Apply the action to get the new state
             Reward reward = mfn_reward(state);            // Compute the reward for the current state
             trajectory.emplace_back(state, action, reward);
         }
