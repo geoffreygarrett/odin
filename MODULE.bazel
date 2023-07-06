@@ -3,10 +3,18 @@ module(name = "odin", version = "0.1.0")
 bazel_dep(name = "zlib", version = "1.2.13")
 bazel_dep(name = "spdlog", version = "1.11.0")
 bazel_dep(name = "rules_cc", version = "0.0.6")
-
+bazel_dep(name = "rules_pkg", version = "0.9.1")
 bazel_dep(name = "bazel_skylib", version = "1.4.2")
 bazel_dep(name = "platforms", version = "0.0.6")
+
 bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
+git_override(
+    module_name = "rules_foreign_cc",
+    remote = "https://github.com/bazelbuild/rules_foreign_cc",
+    commit = "26c77008307c80a90fabc8fe3f7a72b961120a84",
+)
+
+bazel_dep(name = "googletest", version = "1.12.1", repo_name = "com_google_googletest")
 #git_override(
 #    module_name = "rules_foreign_cc",
 #    commit = "7fa1a12",
@@ -14,6 +22,7 @@ bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
 #)
 
 tools = use_extension("@rules_foreign_cc//foreign_cc:extensions.bzl", "tools")
+
 use_repo(
     tools,
     "cmake_3.23.2_toolchains",
@@ -28,24 +37,28 @@ use_repo(
 
 register_toolchains(
     "@rules_foreign_cc_framework_toolchains//:all",
-    "@rules_foreign_cc//toolchains:built_make_toolchain",
     "@rules_foreign_cc//toolchains:built_meson_toolchain",
-    "@rules_foreign_cc//toolchains:built_pkgconfig_toolchain",
+    "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
+    "@rules_foreign_cc//toolchains:built_ninja_toolchain",
+    "@rules_foreign_cc//toolchains:preinstalled_make_toolchain",
+    "@rules_foreign_cc//toolchains:preinstalled_cmake_toolchain",
     "@rules_foreign_cc//toolchains:preinstalled_autoconf_toolchain",
     "@rules_foreign_cc//toolchains:preinstalled_automake_toolchain",
     "@rules_foreign_cc//toolchains:preinstalled_m4_toolchain",
-    "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
     "@cmake_3.23.2_toolchains//:all",
     "@ninja_1.11.1_toolchains//:all",
 )
 
-odin_deps = use_extension("//extensions:deps.bzl", "odin_deps")
+odin_init = use_extension("//:extensions.bzl", "init")
 use_repo(
-    odin_deps,
+    odin_init,
     "com_github_uscilab_cereal",
     "com_github_oneapi_onetbb",
     "com_github_bluebrain_highfive",
     "com_github_hdfgroup_hdf5",
     "com_github_google_glog",
     "com_github_eigen_eigen",
+    "com_github_autodiff_autodiff",
+    "com_google_benchmark",
+    "org_gnu_gsl",
 )

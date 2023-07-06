@@ -1,7 +1,7 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
 
-def odin_dependencies(rules_foreign_cc = True, spdlog = True):
+def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True):
     maybe(
         http_archive,
         name = "rules_pkg",
@@ -10,28 +10,34 @@ def odin_dependencies(rules_foreign_cc = True, spdlog = True):
         urls = ["https://github.com/bazelbuild/rules_pkg/archive/0.9.1.tar.gz"],
     )
 
-    if spdlog:
-        maybe(
-            http_archive,
-            name = "com_github_gabime_spdlog",
-            urls = ["https://github.com/gabime/spdlog/archive/v1.11.0.tar.gz"],
-            strip_prefix = "spdlog-1.11.0",
-        )
+    #    if spdlog:
+    maybe(
+        http_archive,
+        name = "com_github_gabime_spdlog",
+        urls = ["https://github.com/gabime/spdlog/archive/v1.11.0.tar.gz"],
+        build_file = "//:external/spdlog.BUILD",
+        sha256 = "ca5cae8d6cac15dae0ec63b21d6ad3530070650f68076f3a4a862ca293a858bb",
+        strip_prefix = "spdlog-1.11.0",
+    )
 
     #    if fmtlib:
-    #        maybe(
-    #            http_archive,
-    #            name = "com_github_fmtlib_fmt",
-    #            urls = ["
+    maybe(
+        http_archive,
+        name = "com_github_fmtlib_fmt",
+        urls = ["https://github.com/fmtlib/fmt/archive/refs/tags/9.1.0.tar.gz"],
+        build_file = "//:external/fmt.BUILD",
+        #        sha256 = "ede1b6b42188163a3f2e0f25ad5c0637eca564bd8df74d02e31a311dd6b37ad8",
+        strip_prefix = "fmt-9.1.0",
+    )
 
-    if rules_foreign_cc:
-        maybe(
-            http_archive,
-            name = "rules_foreign_cc",
-            sha256 = "2a4d07cd64b0719b39a7c12218a3e507672b82a97b98c6a89d38565894cf7c51",
-            strip_prefix = "rules_foreign_cc-0.9.0",
-            urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/0.9.0.tar.gz"],
-        )
+    #    if rules_foreign_cc:
+    maybe(
+        http_archive,
+        name = "rules_foreign_cc",
+        sha256 = "2a4d07cd64b0719b39a7c12218a3e507672b82a97b98c6a89d38565894cf7c51",
+        strip_prefix = "rules_foreign_cc-0.9.0",
+        urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/0.9.0.tar.gz"],
+    )
 
     maybe(
         http_archive,

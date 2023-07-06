@@ -28,7 +28,7 @@ cmake(
     install = True,
     deps = [
         "@com_github_hdfgroup_hdf5//:hdf5",
-        "@com_github_eigen_eigen//:eigen",
+        "@com_github_eigen_eigen//:eigen_cmake",
     ],
     cache_entries = {
         "CMAKE_CXX_STANDARD": "20",
@@ -38,7 +38,7 @@ cmake(
         "HIGHFIVE_USE_XTENSOR": "OFF",
         "HIGHFIVE_USE_OPENCV": "OFF",
         "HIGHFIVE_USE_HALF_FLOAT": "OFF",
-        "Eigen3_DIR": "$$EXT_BUILD_DEPS$$/eigen/share/eigen3/cmake",
+        "Eigen3_DIR": "$$EXT_BUILD_DEPS$$/eigen_cmake/share/eigen3/cmake",
         #        "Eigen3_DIR": "@com_github_eigen_eigen//:eigen/share/eigen3/cmake",
         # TODO: Integrate this later with threading options etc.
     },
