@@ -1,22 +1,7 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
 
-def odin_dependencies():
-    #    maybe(
-    #        http_archive,
-    #        name = "rules_pkg",
-    #        sha256 = "360c23a88ceaf7f051abc99e2e6048cf7fe5d9af792690576554a88b2013612d",
-    #        strip_prefix = "rules_pkg-0.9.1",
-    #        urls = ["https://github.com/bazelbuild/rules_pkg/archive/0.9.1.tar.gz"],
-    #    )
-    #    maybe(
-    #        http_archive,
-    #        name = "rules_foreign_cc",
-    #        sha256 = "6041f1374ff32ba711564374ad8e007aef77f71561a7ce784123b9b4b88614fc",
-    #        strip_prefix = "rules_foreign_cc-0.8.0",
-    #        urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/0.8.0.tar.gz"],
-    #    )
-
+def odin_dependencies(rules_foreign_cc = True, spdlog = True):
     maybe(
         http_archive,
         name = "rules_pkg",
@@ -24,13 +9,30 @@ def odin_dependencies():
         strip_prefix = "rules_pkg-0.9.1",
         urls = ["https://github.com/bazelbuild/rules_pkg/archive/0.9.1.tar.gz"],
     )
-    maybe(
-        http_archive,
-        name = "rules_foreign_cc",
-        sha256 = "2a4d07cd64b0719b39a7c12218a3e507672b82a97b98c6a89d38565894cf7c51",
-        strip_prefix = "rules_foreign_cc-0.9.0",
-        urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/0.9.0.tar.gz"],
-    )
+
+    if spdlog:
+        maybe(
+            http_archive,
+            name = "com_github_gabime_spdlog",
+            urls = ["https://github.com/gabime/spdlog/archive/v1.11.0.tar.gz"],
+            strip_prefix = "spdlog-1.11.0",
+        )
+
+    #    if fmtlib:
+    #        maybe(
+    #            http_archive,
+    #            name = "com_github_fmtlib_fmt",
+    #            urls = ["
+
+    if rules_foreign_cc:
+        maybe(
+            http_archive,
+            name = "rules_foreign_cc",
+            sha256 = "2a4d07cd64b0719b39a7c12218a3e507672b82a97b98c6a89d38565894cf7c51",
+            strip_prefix = "rules_foreign_cc-0.9.0",
+            urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/0.9.0.tar.gz"],
+        )
+
     maybe(
         http_archive,
         name = "com_github_gflags_gflags",
