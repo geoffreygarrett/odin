@@ -16,14 +16,6 @@
 #define ANSI_COLOR_CYAN "\x1b[36m"
 #define ANSI_COLOR_WHITE "\x1b[37m"
 
-enum LogLevel {
-    TRACE = spdlog::level::trace,
-    DEBUG = spdlog::level::debug,
-    INFO = spdlog::level::info,
-    WARN = spdlog::level::warn,
-    ERROR = spdlog::level::err,
-    CRITICAL = spdlog::level::critical
-};
 
 template<typename Derived>
 class BaseLogger {
