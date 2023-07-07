@@ -1,3 +1,11 @@
+# Python related
+*.py[cod]
+*.so
+*.dylib
+*.dll
+*~
+__pycache__/
+
 # Compiled Object files
 *.slo
 *.lo
@@ -28,16 +36,11 @@
 *.ipa
 *.dll
 
-# Python related
-*.py[cod]
-*~
-__pycache__/
-
-# Bazel build
+# Bazel build files
 /bazel-*
 *.runfiles/
 
-# CMake
+# CMake Files
 CMakeFiles/
 CMakeCache.txt
 CMakeScripts/
@@ -48,10 +51,13 @@ compile_commands.json
 Makefile
 *.cmake
 
-# IDEs
+# IDE specific files
+# VSCode
 .vscode/
+# CLion
+.clwb/
+# IntelliJ / PyCharm
 .idea/
-*.clwb/
 
 # Logs and databases
 *.log
