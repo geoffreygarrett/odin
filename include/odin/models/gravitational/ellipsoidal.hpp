@@ -15,13 +15,13 @@
 
 
 template<typename S,
-         typename F        = gsl_root_fsolver_type,  // bracketing solver type
-         typename FDF      = gsl_root_fdfsolver_type,// polishing/derivative solver type
-         int GSL_PREC_MODE = PrecisionSelector<S>::value>
-class TriAxialEllipsoid {
+        typename F        = gsl_root_fsolver_type,  // bracketing solver type
+        typename FDF      = gsl_root_fdfsolver_type,// polishing/derivative solver type
+        int GSL_PREC_MODE = PrecisionSelector<S>::value>
+class TriAxialEllipsoid : public GravitationalModelBase<TriAxialEllipsoid<S, F, FDF, GSL_PREC_MODE>, S, 3> {
 private:
     // Define solver traits
-    SolverTraits<F>   bracketing_solver_;
+    SolverTraits<F> bracketing_solver_;
     SolverTraits<FDF> derivative_solver_;
 
 public:
@@ -41,41 +41,39 @@ public:
 
     //    using scalar = Scalar;
 
-    [[nodiscard]] TriAxialEllipsoid thread_local_copy() const {
+    [[nodiscard]] TriAxialEllipsoid thread_local_copy_impl() const {
         TriAxialEllipsoid copy = *this;// The SolverTraits copy constructor will allocate new solvers
         return copy;
     }
 
-    TriAxialEllipsoid(
-            Scalar a, Scalar b, Scalar c, Scalar mu,
-            const F   *bracketing_solver_type = gsl_root_fsolver_brent,
-            const FDF *derivative_solver_type = gsl_root_fdfsolver_steffenson)
-        : bracketing_solver_(bracketing_solver_type),
-          derivative_solver_(derivative_solver_type), mu_(mu) {
+    TriAxialEllipsoid(Scalar a, Scalar b, Scalar c, Scalar mu)
+            : bracketing_solver_(gsl_root_fsolver_brent),
+              derivative_solver_(gsl_root_fdfsolver_steffenson), mu_(mu) {
 
         //        error_occurred = false;
         // Initialization flag
         bool swaps_occurred = false;
+        spdlog::debug("Initializing TriAxialEllipsoid with a = {}, b = {}, c = {}", a, b, c);
 
         // Check and enforce a >= b
         if (a < b) {
             std::swap(a, b);
             swaps_occurred = true;
-            ODIN_VLOG(40) << "Swapped a and b to enforce a >= b. New a = " << a << ", b = " << b;
+            spdlog::debug("Swapped a and b to enforce a >= b. New a = {}, b = {}", a, b);
         }
 
         // Check and enforce b >= c
         if (b < c) {
             std::swap(b, c);
             swaps_occurred = true;
-            ODIN_VLOG(40) << "Swapped b and c to enforce b >= c. New b = " << b << ", c = " << c;
+            spdlog::debug("Swapped b and c to enforce b >= c. New b = {}, c = {}", b, c);
         }
 
         // Check and enforce a >= b again, in case the first swap affected this condition
         if (a < b) {
             std::swap(a, b);
             swaps_occurred = true;
-            ODIN_VLOG(40) << "Swapped a and b to enforce a >= b. New a = " << a << ", b = " << b;
+            spdlog::debug("Swapped a and b to enforce a >= b. New a = {}, b = {}", a, b);
         }
 
         // a >= b >= c is now guaranteed to be true
@@ -86,29 +84,31 @@ public:
 
         // Log a warning if swaps occurred
         if (swaps_occurred) {
-            ODIN_LOG_WARNING << "Input axes do not follow the order a >= b >= c. "
-                             << "The inputs have been swapped to satisfy this condition. "
-                             << "This might be a result of an estimation process where two axes have very similar values. "
-                             << "Ensure that the provided axes satisfy the condition a >= b >= c.";
+            spdlog::warn("Input axes do not follow the order a >= b >= c. "
+                         "The inputs have been swapped to satisfy this condition. "
+                         "This might be a result of an estimation process where two axes have very similar values. "
+                         "Ensure that the provided axes satisfy the condition a >= b >= c.");
         }
-        ODIN_VLOG(10) << "Ellipsoid initialized with a = " << a << ", b = " << b << ", c = " << c << ", mu = " << mu;
+
+        // Use spdlog's built-in formatting for easy-to-read logging
+        spdlog::debug("Ellipsoid initialized with a = {}, b = {}, c = {}, mu = {}", a, b, c, mu);
 
         if constexpr (!std::is_same_v<Scalar, float> && !std::is_same_v<Scalar, double>) {
-            ODIN_LOG_WARNING << "Scalar type is neither float nor double. "
-                             << "Note that the GSL special functions only support up to double precision. "
-                             << "See https://www.gnu.org/software/gsl/doc/html/specfunc.html#modes for more details.";
+            spdlog::warn("Scalar type is neither float nor double. "
+                         "Note that the GSL special functions only support up to double precision. "
+                         "See https://www.gnu.org/software/gsl/doc/html/specfunc.html#modes for more details.");
         }
     }
-    //    [[nodiscard]] Scalar potential(const Vector &position) const {
 
     [[nodiscard]] Scalar potential(const Eigen::Vector3<Scalar> &position) const {
-        Scalar kappa_0   = compute_confocal_ellipsoid_root(position.x(), position.y(), position.z());
+        Scalar kappa_0 = compute_confocal_ellipsoid_root(position.x(), position.y(), position.z());
         Scalar potential = (// clang-format off
-             -((3.0 / 2.0) * mu_ * R_F(a_ * a_ + kappa_0, b_ * b_ + kappa_0, c_ * c_ + kappa_0)
-             - 0.5 * mu_ * (position.x() * position.x() * R_D(b_ * b_ + kappa_0, c_ * c_ + kappa_0, a_ * a_ + kappa_0)
-                          + position.y() * position.y() * R_D(a_ * a_ + kappa_0, c_ * c_ + kappa_0, b_ * b_ + kappa_0)
-                          + position.z() * position.z() * R_D(a_ * a_ + kappa_0, b_ * b_ + kappa_0, c_ * c_ + kappa_0)
-             ))// clang-format on
+                -((3.0 / 2.0) * mu_ * R_F(a_ * a_ + kappa_0, b_ * b_ + kappa_0, c_ * c_ + kappa_0)
+                  - 0.5 * mu_ *
+                    (position.x() * position.x() * R_D(b_ * b_ + kappa_0, c_ * c_ + kappa_0, a_ * a_ + kappa_0)
+                     + position.y() * position.y() * R_D(a_ * a_ + kappa_0, c_ * c_ + kappa_0, b_ * b_ + kappa_0)
+                     + position.z() * position.z() * R_D(a_ * a_ + kappa_0, b_ * b_ + kappa_0, c_ * c_ + kappa_0)
+                    ))// clang-format on
         );
         return potential;
     }
@@ -122,6 +122,11 @@ public:
                 -mu_ * position.z() * R_D(a_ * a_ + kappa_0, b_ * b_ + kappa_0, c_ * c_ + kappa_0)};
         return acceleration;
     }
+
+//    TriAxialEllipsoid(Scalar a, Scalar b, Scalar c, Scalar mu) : TriAxialEllipsoid(
+//            a, b, c, mu,
+//            gsl_root_fsolver_brent,
+//            gsl_root_fdfsolver_steffenson) {}
 
     //    template<typename Scalar, size_t Dim>
     //    struct Params {
@@ -166,83 +171,78 @@ public:
 private:
     // GSL expects double precision functions
     static double C_static(double kappa, void *p) {
-        auto  *params = (struct C_params *) p;
-        double x      = params->x;
-        double y      = params->y;
-        double z      = params->z;
-        double a      = params->a;
-        double b      = params->b;
-        double c      = params->c;
+        auto *params = (struct C_params *) p;
+        double x = params->x;
+        double y = params->y;
+        double z = params->z;
+        double a = params->a;
+        double b = params->b;
+        double c = params->c;
 
         double a_sqr_plus_kappa = a * a + kappa;
         double b_sqr_plus_kappa = b * b + kappa;
         double c_sqr_plus_kappa = c * c + kappa;
 
         return (x * x) / a_sqr_plus_kappa
-             + (y * y) / b_sqr_plus_kappa
-             + (z * z) / c_sqr_plus_kappa - 1;
+               + (y * y) / b_sqr_plus_kappa
+               + (z * z) / c_sqr_plus_kappa - 1;
     }
 
     // GSL expects double precision functions
     static double dC_dkappa_static(double kappa, void *p) {
-        auto  *params = (struct C_params *) p;
-        double x      = params->x;
-        double y      = params->y;
-        double z      = params->z;
-        double a      = params->a;
-        double b      = params->b;
-        double c      = params->c;
+        auto *params = (struct C_params *) p;
+        double x = params->x;
+        double y = params->y;
+        double z = params->z;
+        double a = params->a;
+        double b = params->b;
+        double c = params->c;
 
         double a_sqr_plus_kappa = a * a + kappa;
         double b_sqr_plus_kappa = b * b + kappa;
         double c_sqr_plus_kappa = c * c + kappa;
 
         return -(x * x) / (a_sqr_plus_kappa * a_sqr_plus_kappa)
-             - (y * y) / (b_sqr_plus_kappa * b_sqr_plus_kappa)
-             - (z * z) / (c_sqr_plus_kappa * c_sqr_plus_kappa);
+               - (y * y) / (b_sqr_plus_kappa * b_sqr_plus_kappa)
+               - (z * z) / (c_sqr_plus_kappa * c_sqr_plus_kappa);
     }
 
     // GSL expects double precision functions
     static void C_and_dC_dkappa_static(double kappa, void *p, double *C, double *dC) {
-        auto  *params = (struct C_params *) p;
-        double x      = params->x;
-        double y      = params->y;
-        double z      = params->z;
-        double a      = params->a;
-        double b      = params->b;
-        double c      = params->c;
+        auto *params = (struct C_params *) p;
+        double x = params->x;
+        double y = params->y;
+        double z = params->z;
+        double a = params->a;
+        double b = params->b;
+        double c = params->c;
 
         double a_sqr_plus_kappa = a * a + kappa;
         double b_sqr_plus_kappa = b * b + kappa;
         double c_sqr_plus_kappa = c * c + kappa;
 
         *C = (x * x) / a_sqr_plus_kappa
-           + (y * y) / b_sqr_plus_kappa
-           + (z * z) / c_sqr_plus_kappa - 1;
+             + (y * y) / b_sqr_plus_kappa
+             + (z * z) / c_sqr_plus_kappa - 1;
         *dC = -(x * x) / (a_sqr_plus_kappa * a_sqr_plus_kappa)
-            - (y * y) / (b_sqr_plus_kappa * b_sqr_plus_kappa)
-            - (z * z) / (c_sqr_plus_kappa * c_sqr_plus_kappa);
+              - (y * y) / (b_sqr_plus_kappa * b_sqr_plus_kappa)
+              - (z * z) / (c_sqr_plus_kappa * c_sqr_plus_kappa);
     }
 
 
     Scalar a_, b_, c_, mu_;
 
     static void handler(const char *reason, const char *file, int line, int gsl_errno) {
-        ODIN_LOG_ERROR
-                << Red("GSL error number: ") << Red(std::to_string(gsl_errno))
-                << " File: " << file
-                << " Line: " << std::to_string(line)
-                << " Reason: " << Red(reason);
-        //        error_occurred = true;
-        std::exit(1);
+        SPDLOG_ERROR("GSL error number: {}, File: {}, Line: {}, Reason: {}", gsl_errno, file, line, reason);
+        throw std::runtime_error("GSL error");
     }
 
     Scalar compute_confocal_ellipsoid_root(Scalar x, Scalar y, Scalar z,
-                                           int    max_iter         = 100,
+                                           int max_iter = 100,
                                            double interval_abs_eps = 0.0,
                                            double interval_rel_eps = 1e-3,
-                                           double delta_abs_eps    = 0.0,
-                                           double delta_rel_eps    = 1e-6,
+                                           double delta_abs_eps = 0.0,
+                                           double delta_rel_eps = 1e-3,
                                            double residual_abs_eps = 0.0,
                                            double residual_rel_eps = 0.0) const {
         //        There is only one root that applies to the confocal ellipsoid, the other two
@@ -254,28 +254,28 @@ private:
 
 
         // Setting up the function and its derivative for the solver
-        C_params         params;
+        C_params params;
         gsl_function_fdf function_fdf;
-        function_fdf.f      = &C_static;
-        function_fdf.df     = &dC_dkappa_static;
-        function_fdf.fdf    = &C_and_dC_dkappa_static;
-        params.x            = x;
-        params.y            = y;
-        params.z            = z;
-        params.a            = a_;
-        params.b            = b_;
-        params.c            = c_;
+        function_fdf.f = &C_static;
+        function_fdf.df = &dC_dkappa_static;
+        function_fdf.fdf = &C_and_dC_dkappa_static;
+        params.x = x;
+        params.y = y;
+        params.z = z;
+        params.a = a_;
+        params.b = b_;
+        params.c = c_;
         function_fdf.params = &params;
         gsl_function function_f;
         function_f.function = &C_static;
-        function_f.params   = &params;
+        function_f.params = &params;
 
-
+//        spdlog::error("a: {0}, b: {1}, c: {2}, x: {3}, y: {4}, z: {5}", a_, b_, c_, x, y, z);
         Scalar lower_bound, upper_bound;
 
         // Check if we are inside the ellipsoid
         static const Scalar perturbation = 1e-16;
-        Scalar              C            = C_static(0.0, &params);
+        Scalar C = C_static(0.0, &params);
         if (C < 0) {
 
             return 0.0;
@@ -287,12 +287,13 @@ private:
             // Upper bound is the square of the maximum value among |a*x|, |b*y|, and |c*z|.
             // We take the absolute values to ensure we deal with positive numbers as we are squaring it.
             // This upper limit is based on an approximation of the potential field outside the ellipsoid.
-            upper_bound = std::pow(std::max({std::abs(a_ * x), std::abs(b_ * y), std::abs(c_ * z)}), 2.0);
+            upper_bound = std::pow(std::max({std::abs(a_ * x), std::abs(b_ * y), std::abs(c_ * z)}), 2.5);
         }
 
         //        ODIN_LOG_INFO << "upper_bound: " << upper_bound << " lower_bound: " << lower_bound << std::endl;
         //        Scalar upper_bound = std::pow(std::max({std::abs(a_ * x), std::abs(b_ * y), std::abs(c_ * z)}), 2.5);
         //        Scalar upper_bound = std::max({std::pow(x, 2), std::pow(z, 2), std::pow(z, 2)});
+//        SPDLOG_INFO("upper_bound: {0}, lower_bound: {1}", upper_bound, lower_bound);
 
         //        SetContext(x, y, z, a_, b_, c_);
         gsl_set_error_handler(&TriAxialEllipsoid::handler);
@@ -310,28 +311,28 @@ private:
         //        }
 
         // Setting up the hybrid solver
-        int                  status;
-        int                  iterations        = 0;
-        bool                 use_bracketing    = true;
+        int status;
+        int iterations = 0;
+        bool use_bracketing = true;
         static constexpr int STATUS_BRACKETING = 10;
-        static constexpr int STATUS_CONVERGED  = 0;
+        static constexpr int STATUS_CONVERGED = 0;
 
         Scalar root_0;
         Scalar root_1;
-        int    total_iters      = 0;
-        int    bracketing_iters = 0;
-        int    polishing_iters  = 0;
+        int total_iters = 0;
+        int bracketing_iters = 0;
+        int polishing_iters = 0;
 
         // Hybrid solver
         do {// This should only run once, but just in case the polishing solver fails, we could bracket for the
             // final desired tolerance.
-            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return Blue(bracketing_solver_.log_method()); }(), 60);
-            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return bracketing_solver_.log_header(); }(), 60);
+//            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return Blue(bracketing_solver_.log_method()); }(), 60);
+//            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return bracketing_solver_.log_header(); }(), 60);
             // Bracketing phase
             do {
                 root_0 = root_1;
                 bracketing_iters++, total_iters++;
-                status      = bracketing_solver_.iterate();
+                status = bracketing_solver_.iterate();
                 upper_bound = bracketing_solver_.x_upper();
                 lower_bound = bracketing_solver_.x_lower();
 
@@ -343,35 +344,41 @@ private:
                                                 interval_rel_eps);
 
                 if (status == GSL_CONTINUE) {
-                    ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return bracketing_solver_.log_status(bracketing_iters); }(), 60);
+//                    ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES(
+//                            [&]() { return bracketing_solver_.log_status(bracketing_iters); }(), 60);
                 }
 
             } while (status == GSL_CONTINUE);
-            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return Green(bracketing_solver_.log_convergence()); }(), 60);
-            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return Green(bracketing_solver_.log_status(bracketing_iters)); }(), 60);
+//            ODIN_VLOG(60)
+//                    << ODIN_IF_VERBOSITY_MATCHES([&]() { return Green(bracketing_solver_.log_convergence()); }(), 60);
+//            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES(
+//                    [&]() { return Green(bracketing_solver_.log_status(bracketing_iters)); }(), 60);
 
 
             // Gradient (polish) phase
             Scalar midpoint = (lower_bound + upper_bound) / 2;
             derivative_solver_.set(&function_fdf, midpoint);
-            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return Blue(derivative_solver_.log_method()); }(), 60);
-            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return derivative_solver_.log_header(); }(), 60);
-            do {
-                root_0 = root_1;
-                polishing_iters++, total_iters++;
-                status = derivative_solver_.iterate();
-                root_1 = derivative_solver_.root();
-                status = gsl_root_test_delta(root_1,
-                                             root_0,
-                                             delta_abs_eps,
-                                             delta_rel_eps);
-
-                if (status == GSL_CONTINUE) {
-                    ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return derivative_solver_.log_status(polishing_iters); }(), 60);
-                }
-            } while (status == GSL_CONTINUE);
-            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return Green(derivative_solver_.log_convergence()); }(), 60);
-            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return Green(derivative_solver_.log_status(polishing_iters)); }(), 60);
+//            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return Blue(derivative_solver_.log_method()); }(), 60);
+//            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES([&]() { return derivative_solver_.log_header(); }(), 60);
+//            do {
+//                root_0 = root_1;
+//                polishing_iters++, total_iters++;
+//                status = derivative_solver_.iterate();
+//                root_1 = derivative_solver_.root();
+//                status = gsl_root_test_delta(root_1,
+//                                             root_0,
+//                                             delta_abs_eps,
+//                                             delta_rel_eps);
+//
+//                if (status == GSL_CONTINUE) {
+////                    ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES(
+////                            [&]() { return derivative_solver_.log_status(polishing_iters); }(), 60);
+//                }
+//            } while (status == GSL_CONTINUE);
+//            ODIN_VLOG(60)
+//                    << ODIN_IF_VERBOSITY_MATCHES([&]() { return Green(derivative_solver_.log_convergence()); }(), 60);
+//            ODIN_VLOG(60) << ODIN_IF_VERBOSITY_MATCHES(
+//                    [&]() { return Green(derivative_solver_.log_status(polishing_iters)); }(), 60);
         } while (status == GSL_CONTINUE && iterations < max_iter);
         return root_1;
     }
@@ -386,6 +393,7 @@ private:
 };
 
 // Verify that it adheres to the GravitationalModel concept
-static_assert(is_gravitational_model_v<TriAxialEllipsoid<double>>, "TriAxialEllipsoid does not comply with GravitationalConcept.");
+static_assert(is_gravitational_model_v<TriAxialEllipsoid<double>>,
+              "TriAxialEllipsoid does not comply with GravitationalConcept.");
 
 #endif//TRI_AXIAL_ELLIPSOIDAL_HPP

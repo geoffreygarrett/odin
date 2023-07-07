@@ -11,7 +11,7 @@ filegroup(
 
 filegroup(
     name = "eigen_headers",
-    srcs = glob(["Eigen/**"]),
+    srcs = glob(["Eigen/**", "unsupported/Eigen/**"]),
     visibility = ["//visibility:public"],
     # We make this public, so we have the option of packaging it
     # with our output.

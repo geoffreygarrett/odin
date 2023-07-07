@@ -22,7 +22,7 @@ class BaseLogger {
     std::once_flag async_init_flag;
 
 public:
-    std::shared_ptr <spdlog::logger> logger;
+    std::shared_ptr<spdlog::logger> logger;
 
     BaseLogger() {
         std::call_once(async_init_flag, []() { spdlog::init_thread_pool(8192, 1); });
@@ -34,6 +34,10 @@ public:
         stream << msg;
         logger->info(stream.str());
         return static_cast<Derived &>(*this);
+    }
+
+    void flush() {
+        logger->flush();
     }
 
     template<typename FormatString, typename... Args>
