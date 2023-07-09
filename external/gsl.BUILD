@@ -5,9 +5,9 @@ configure_make(
     lib_source = "//:gsl_sources",
     out_include_dir = "include",
     out_lib_dir = "lib",
-    env = {
-        "MAKEFLAGS": "-j$$(nproc)",
-    },
+#    env = {
+#        "MAKEFLAGS": "-j$$(nproc)",
+#    },
     out_static_libs = ["libgsl.a", "libgslcblas.a"],
     visibility = ["//visibility:public"],
 )
