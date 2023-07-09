@@ -26,7 +26,7 @@ def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True):
         name = "com_github_fmtlib_fmt",
         urls = ["https://github.com/fmtlib/fmt/archive/refs/tags/9.1.0.tar.gz"],
         build_file = "//:external/fmt.BUILD",
-        #        sha256 = "ede1b6b42188163a3f2e0f25ad5c0637eca564bd8df74d02e31a311dd6b37ad8",
+        sha256 = "5dea48d1fcddc3ec571ce2058e13910a0d4a6bab4cc09a809d8b1dd1c88ae6f2",
         strip_prefix = "fmt-9.1.0",
     )
 
