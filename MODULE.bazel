@@ -1,25 +1,20 @@
 module(name = "odin", version = "0.1.0")
 
 bazel_dep(name = "zlib", version = "1.2.13")
-bazel_dep(name = "spdlog", version = "1.11.0")
+bazel_dep(name = "spdlog", version = "1.11.0", repo_name = "com_github_gabime_spdlog")
 bazel_dep(name = "rules_cc", version = "0.0.6")
 bazel_dep(name = "rules_pkg", version = "0.9.1")
 bazel_dep(name = "bazel_skylib", version = "1.4.2")
 bazel_dep(name = "platforms", version = "0.0.6")
 
-bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
-git_override(
-    module_name = "rules_foreign_cc",
-    remote = "https://github.com/bazelbuild/rules_foreign_cc",
-    commit = "26c77008307c80a90fabc8fe3f7a72b961120a84",
-)
-
-bazel_dep(name = "googletest", version = "1.12.1", repo_name = "com_google_googletest")
+bazel_dep(name = "rules_foreign_cc")
 #git_override(
 #    module_name = "rules_foreign_cc",
-#    commit = "7fa1a12",
 #    remote = "https://github.com/bazelbuild/rules_foreign_cc",
+#    commit = "26c77008307c80a90fabc8fe3f7a72b961120a84",
 #)
+
+bazel_dep(name = "googletest", version = "1.12.1", repo_name = "com_google_googletest")
 
 tools = use_extension("@rules_foreign_cc//foreign_cc:extensions.bzl", "tools")
 

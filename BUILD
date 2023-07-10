@@ -60,8 +60,15 @@ cc_library(
         ":cereal",
         "@com_github_eigen_eigen//:header_lib",
         "@com_github_gabime_spdlog//:spdlog",
+        "@com_github_oneapi_onetbb//:tbb",
     ],
 )
+
+#cc_binary(
+#    name = "main",
+#    srcs = ["//:src/main.cpp"],
+#    deps = [":odin"],
+#)
 
 # Configuration settings
 create_config_setting(

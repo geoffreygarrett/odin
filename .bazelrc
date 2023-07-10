@@ -4,7 +4,7 @@
 
 # These options are effective in all Bazel commands executed in this workspace.
 common --enable_platform_specific_config
-common --experimental_enable_bzlmod
+#common --experimental_enable_bzlmod
 build --incompatible_enable_cc_toolchain_resolution
 # The above option results in --config=linux,macos, or --config=windows automatically.
 
