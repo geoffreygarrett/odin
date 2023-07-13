@@ -166,6 +166,15 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "test_tree",
+    srcs = ["test_tree.cpp"],
+    deps = [
+        ":gtest_main",
+        "@//:odin",
+    ],
+)
+
 # All tests target
 test_suite(
     name = "all_tests",

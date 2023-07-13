@@ -1,6 +1,7 @@
 #include <Eigen/Dense>
 #include <iostream>
 #include <odin/logging.hpp>
+#include <odin/optimization/tree/mcts.hpp>
 
 #include <cereal/archives/binary.hpp>
 #include <cereal/types/memory.hpp>
@@ -34,41 +35,39 @@ void main2() {
     std::cout << "u = " << u << std::endl;       // print the evaluated output u
     std::cout << "du/dx = " << dudx << std::endl;// print the evaluated derivative du/dx
 }
-#include <iostream>
-#include <string>
+#include <chrono>
 #include <iostream>
 #include <string>
 #include <thread>
-#include <chrono>
 
 // Constants for the loading bar
-const int BAR_WIDTH = 50;
-const std::string BAR_CHAR = "=";
+const int         BAR_WIDTH  = 50;
+const std::string BAR_CHAR   = "=";
 const std::string SPACE_CHAR = " ";
 
-// Function to draw a loading bar
-void DrawProgressBar(float progress) {
-    // Calculate the number of characters in the bar
-    int pos = BAR_WIDTH * progress;
-
-    // Initialize the bar with spaces
-    std::string bar(BAR_WIDTH, SPACE_CHAR[0]);
-
-    // Replace the spaces with the bar character up to the current position
-    for (int i = 0; i < pos; ++i) {
-        bar[i] = BAR_CHAR[0];
-    }
-
-    // Colorize the bar
-    bar = Colorize(bar, ANSI_COLOR_GREEN);
-
-    // Print the progress bar
-    std::cout << "[" << bar << "] " << int(progress * 100.0) << " %\r";
-    std::cout << std::flush;
-}
+//// Function to draw a loading bar
+//void DrawProgressBar(float progress) {
+//    // Calculate the number of characters in the bar
+//    int pos = BAR_WIDTH * progress;
+//
+//    // Initialize the bar with spaces
+//    std::string bar(BAR_WIDTH, SPACE_CHAR[0]);
+//
+//    // Replace the spaces with the bar character up to the current position
+//    for (int i = 0; i < pos; ++i) {
+//        bar[i] = BAR_CHAR[0];
+//    }
+//
+//    // Colorize the bar
+//    bar = Colorize(bar, ANSI_COLOR_GREEN);
+//
+//    // Print the progress bar
+//    std::cout << "[" << bar << "] " << int(progress * 100.0) << " %\r";
+//    std::cout << std::flush;
+//}
 
 int main(int argc, char *argv[]) {
-    INIT_ODIN_LOGGING(argv[0], "./log/odin.log");
+    //    INIT_ODIN_LOGGING(argv[0], "./log/odin.log");
 
     std::cout << std::endl;
     std::cout << "Hello from oneTBB "
@@ -95,10 +94,10 @@ int main(int argc, char *argv[]) {
         ODIN_LOG_WARNING << "Hello, this is a warning!";
         ODIN_LOG_ERROR << "Hello, this is an error!";
     }
-//    for (int i = 0; i <= 100; ++i) {
-//        DrawProgressBar(i/100.0);
-//        std::this_thread::sleep_for(std::chrono::milliseconds(100));  // Simulate work
-//    }
+    //    for (int i = 0; i <= 100; ++i) {
+    //        DrawProgressBar(i/100.0);
+    //        std::this_thread::sleep_for(std::chrono::milliseconds(100));  // Simulate work
+    //    }
     std::cout << std::endl;
 
     std::cout << "\033[34m"

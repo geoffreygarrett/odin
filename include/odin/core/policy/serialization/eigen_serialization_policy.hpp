@@ -10,7 +10,7 @@
 #include <sstream>
 #include <type_traits>
 #include <concepts>
-#include "serialization_policy.hpp"
+//#include "serialization_policy.hpp"
 
 /**
  * @brief Concept defining the requirements for an Eigen matrix.

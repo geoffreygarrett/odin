@@ -1,6 +1,23 @@
+#ifndef ODIN_TREE_BASE_HPP
+#define ODIN_TREE_BASE_HPP
+
+#include <cereal/access.hpp>
+#include <cereal/archives/binary.hpp>
+#include <cereal/archives/portable_binary.hpp>
+#include <cereal/cereal.hpp>
+#include <cereal/types/memory.hpp>
+#include <cereal/types/tuple.hpp>
+#include <cereal/types/variant.hpp>
+#include <cereal/types/vector.hpp>
+#include <optional>
+
+#include <odin/core/policy/serialization/eigen_serialization_policy.hpp>
+
+//#include "mcts_serialization.hpp"
+#include <Eigen/Core>
+#include <cereal/access.hpp>
 #include <memory>
 #include <vector>
-
 
 // Default formatter
 template<typename T, typename Enable = void>
@@ -110,7 +127,18 @@ public:
     }
 
     void clear() {
+        // TODO: Think this through more carefully. Idiomatic is the key.
         m_n = 0;
+        if (m_calc_min) m_min = std::numeric_limits<Float>::max();
+        if (m_calc_max) m_max = std::numeric_limits<Float>::min();
+        if (m_calc_mean || m_calc_variance) {
+            m_old_mean = 0;
+            m_new_mean = 0;
+        }
+        if (m_calc_variance) {
+            m_old_sqr_diff = 0;
+            m_new_sqr_diff = 0;
+        }
     }
 
     void push(Float x) {
@@ -181,25 +209,25 @@ private:
     bool  m_calc_max;
     Float m_min, m_max;
     Float m_old_mean, m_new_mean, m_old_sqr_diff, m_new_sqr_diff;
+
+    // making the cereal namespace a friend
+    friend class cereal::access;
+
+    template<class Archive>
+    void serialize(Archive &archive) {
+        archive(cereal::make_nvp("calc_mean", m_calc_mean),
+                cereal::make_nvp("calc_variance", m_calc_variance),
+                cereal::make_nvp("calc_min", m_calc_min),
+                cereal::make_nvp("calc_max", m_calc_max),
+                cereal::make_nvp("n", m_n),
+                cereal::make_nvp("min", m_min),
+                cereal::make_nvp("max", m_max),
+                cereal::make_nvp("old_mean", m_old_mean),
+                cereal::make_nvp("new_mean", m_new_mean),
+                cereal::make_nvp("old_sqr_diff", m_old_sqr_diff),
+                cereal::make_nvp("new_sqr_diff", m_new_sqr_diff));
+    }
 };
-//
-//    friend std::ostream &operator<<(std::ostream &os, const NodeBase &node) {
-//        os << "Node(S: ";
-//        formatter<State>::print(os, node.state);
-//        os << ", A: ";
-//        formatter<Action>::print(os, node.action);
-//        os << ", R: " << node.reward_stats;
-//        os << ", n: " << node.visit_count;
-//        //        os << ", update_count: " << node.update_count;
-//        os << ", is_terminal: " << std::boolalpha << node.is_terminal;
-//        os << ", is_leaf: " << std::boolalpha << node.is_leaf;
-//        os << ", child_count: " << static_cast<const Derived &>(node).children_size() << ")";
-//        return os;
-//    }
-#include <cereal/archives/binary.hpp>
-#include <cereal/archives/portable_binary.hpp>
-#include <cereal/cereal.hpp>
-#include <cereal/types/memory.hpp>
 
 template<typename Derived, typename State, typename Action, typename Reward>
 struct NodeBase {
@@ -215,13 +243,24 @@ struct NodeBase {
     virtual ~NodeBase() = default;
 
     [[nodiscard]] bool is_leaf_node() const {
-        //        return (static_cast<const Derived &>(*this).children.empty() || this->is_leaf);
         return ((static_cast<const Derived &>(*this).children_size() == 0) || this->is_leaf);
     }
 
-    NodeBase(State state, std::optional<Action> action, Derived *parent = nullptr, RunningStats<Reward> initial_reward_stats = RunningStats<Reward>())
-        : state(state), action(action),
-          visit_count(0), update_count(0), is_terminal(false), is_leaf(true), parent(parent), reward_stats(initial_reward_stats) {}
+    //     default constructor for cereal deserialization
+    NodeBase() = default;
+
+    NodeBase(State                 state,
+             std::optional<Action> action,
+             Derived              *parent               = nullptr,
+             RunningStats<Reward>  initial_reward_stats = RunningStats<Reward>())
+        : state(state),
+          action(action),
+          visit_count(0),
+          update_count(0),
+          is_terminal(false),
+          is_leaf(true),
+          parent(parent),
+          reward_stats(initial_reward_stats) {}
 
     NodeBase(const NodeBase &other)
         : state(other.state), action(other.action), reward_stats(other.reward_stats),
@@ -244,8 +283,45 @@ struct NodeBase {
         os << ", child_count: " << static_cast<const Derived &>(node).children_size() << ")";
         return os;
     }
-};
 
+    // Serialization function definition
+    template<class Archive>
+    void serialize(Archive &ar) {
+        ar(cereal::make_nvp("state", state),
+           cereal::make_nvp("action", action),
+           cereal::make_nvp("reward_stats", reward_stats),
+           cereal::make_nvp("visit_count", visit_count),
+           cereal::make_nvp("update_count", update_count),
+           cereal::make_nvp("is_terminal", is_terminal),
+           cereal::make_nvp("is_leaf", is_leaf));
+
+        // Call method to serialize derived parts.
+        // This will call the appropriate method for the actual type of the object.
+        static_cast<Derived *>(this)->serialize_derived(ar);
+    }
+
+    template<class Archive>
+    static void load_and_construct(Archive &ar, cereal::construct<Derived> &construct) {
+        State                 state;
+        std::optional<Action> action;
+        RunningStats<Reward>  reward_stats;
+        size_t                visit_count;
+        size_t                update_count;
+        bool                  is_terminal;
+        bool                  is_leaf;
+
+        // Call deserialize on all members
+        ar(cereal::make_nvp("state", state),
+           cereal::make_nvp("action", action),
+           cereal::make_nvp("reward_stats", reward_stats),
+           cereal::make_nvp("visit_count", visit_count),
+           cereal::make_nvp("update_count", update_count),
+           cereal::make_nvp("is_terminal", is_terminal),
+           cereal::make_nvp("is_leaf", is_leaf));
+
+        Derived::load_and_construct_derived(ar, construct, state, action, reward_stats);
+    }
+};
 
 // Forward declarations
 template<typename State, typename Action, typename Reward>
@@ -255,20 +331,23 @@ template<typename State, typename Action, typename Reward>
 struct PyNode;
 
 template<typename State, typename Action, typename Reward>
-std::unique_ptr<Node<State, Action, Reward>> convert_py_node_to_node(const PyNode<State, Action, Reward> &py_node);
+std::unique_ptr<Node<State, Action, Reward>> convert_py_node_to_node(const PyNode<State, Action, Reward> &py_node, Node<State, Action, Reward> *parent = nullptr);
 
 template<typename State, typename Action, typename Reward>
-std::shared_ptr<PyNode<State, Action, Reward>> convert_node_to_py_node(const Node<State, Action, Reward> &node);
+std::shared_ptr<PyNode<State, Action, Reward>> convert_node_to_py_node(const Node<State, Action, Reward> &node, std::shared_ptr<PyNode<State, Action, Reward>> parent = nullptr);
 
 template<typename State, typename Action, typename Reward>
 struct Node : NodeBase<Node<State, Action, Reward>, State, Action, Reward> {
     using NodeBase<Node, State, Action, Reward>::NodeBase;
     std::vector<std::unique_ptr<Node<State, Action, Reward>>> children;
+    Node() = default;
 
     Node(const Node &other)
         : NodeBase<Node, State, Action, Reward>(other) {
         for (const auto &child: other.children) {
-            this->children.push_back(std::make_unique<Node>(*child));
+            auto new_child = std::make_unique<Node>(*child);
+            new_child->parent = this;  // update parent pointer
+            this->children.push_back(std::move(new_child));
         }
     }
 
@@ -280,29 +359,39 @@ struct Node : NodeBase<Node<State, Action, Reward>, State, Action, Reward> {
         return convert_node_to_py_node(*this);
     }
 
-    //    // Serialization function
-    //    template<class Archive>
-    //    void save(Archive &archive) const {
-    //        NodeBase<Node<State, Action, Reward>, State, Action, Reward>::save(archive);
-    //        // Save children size
-    //        archive(cereal::make_size_tag(static_cast<size_t>(children.size())));
-    //        // Save each child
-    //        for (const auto &child: children)
-    //            archive(*child);
-    //    }
-    //
-    //    template<class Archive>
-    //    void load(Archive &archive) {
-    //        NodeBase<Node<State, Action, Reward>, State, Action, Reward>::load(archive);
-    //        // Load children
-    //        size_t childrenSize;
-    //        archive(cereal::make_size_tag(childrenSize));
-    //        // Load each child
-    //        for (size_t i = 0; i < childrenSize; i++) {
-    //            children.push_back(std::make_unique<Node>());
-    //            archive(*children.back());
-    //        }
-    //    }
+//    // Serialization function definition
+//    template<class Archive>
+//    void serialize_derived(Archive &ar) {
+//        ar(cereal::make_nvp("children", children));
+//    }
+//
+//    template<class Archive>
+//    static void
+//    load_and_construct_derived(Archive                                        &ar,
+//                               cereal::construct<Node<State, Action, Reward>> &construct,
+//                               State                                          &state,
+//                               std::optional<Action>                          &action,
+//                               RunningStats<Reward>                           &reward_stats,
+//                               size_t                                          visit_count,
+//                               size_t                                          update_count,
+//                               bool                                            is_terminal,
+//                               bool                                            is_leaf) {
+//        std::vector<std::unique_ptr<Node<State, Action, Reward>>> children;
+//        std::weak_ptr<PyNode<State, Action, Reward>>              parent;
+//
+//        // Call deserialize on parent and children
+//        ar(cereal::make_nvp("children", children));
+//
+//        // Call construct on the PyNode
+//        construct(state,
+//                  action,
+//                  nullptr,
+//                  reward_stats,
+//                  visit_count,
+//                  update_count,
+//                  is_terminal,
+//                  is_leaf);
+//    }
 };
 
 
@@ -310,12 +399,15 @@ template<typename Derived, typename State, typename Action, typename Reward>
 struct MCTSBase {
     using node_type = Node<State, Action, Reward>;
     using p_node    = std::unique_ptr<node_type>;
-
     // Root node of the tree
     p_node root;
 
     explicit MCTSBase(State state, std::optional<Action> action = std::nullopt) {
         root = std::make_unique<node_type>(state, action, nullptr);
+    }
+
+    explicit MCTSBase(node_type *node) {
+        root = std::make_unique<node_type>(*node);
     }
 
     MCTSBase(const MCTSBase &other) {
@@ -335,6 +427,39 @@ struct MCTSBase {
         return os;
     }
 
+    // Serialization function definition
+    template<class Archive>
+    void serialize(Archive &ar) {
+        //        ar(cereal::make_nvp("root", convert_node_to_py_node(*root)));
+        ar(cereal::make_nvp("root", convert_node_to_py_node(*root)));
+
+        // Call method to serialize derived parts.
+        // This will call the appropriate method for the actual type of the object.
+        static_cast<Derived *>(this)->serialize_derived(ar);
+    }
+
+    template<class Archive>
+    static void
+    load_and_construct(Archive &ar, cereal::construct<Derived> &construct) {
+        std::shared_ptr<PyNode<State, Action, Reward>> root_py;
+
+        //        // Call deserialize on all members
+        //        ar(cereal::make_nvp("root", convert_py_node_to_node(*root)));
+
+        // Call deserialize on all members
+        ar(cereal::make_nvp("root", root_py));
+
+        //        // Call construct on the PyNode
+        //        construct(*root);
+
+        // Call construct on the Node from PyNode
+        construct(convert_py_node_to_node(root_py).get());
+
+        // Call method to serialize derived parts.
+        // This will call the appropriate method for the actual type of the object.
+        //        Derived::load_and_construct_derived(ar);
+    }
+
 
 private:
     static void print_node(std::ostream &os, const node_type &node, const std::string &prefix, bool is_tail) {
@@ -345,3 +470,6 @@ private:
         }
     }
 };
+
+
+#endif// ODIN_TREE_BASE_HPP
