@@ -1,268 +1,212 @@
+#ifndef ODIN_SEARCH_HPP
+#define ODIN_SEARCH_HPP
 
 #include <functional>
+#include <future>
+#include <odin/tree/base.hpp>
+#include <odin/tree/resource.hpp>
+#include <optional>
+#include <stack>
+#include <tbb/concurrent_priority_queue.h>
 #include <tbb/concurrent_vector.h>
+#include <tbb/parallel_for_each.h>
 #include <tbb/parallel_sort.h>
 #include <tbb/task_group.h>
+#include <type_traits>
+#include <variant>
+
+namespace odin {
+
+// Empty struct used as a default argument for DerivedMetrics
+struct EmptyMetrics {};
 
 
-#include "base.hpp"
-#include "include/oneapi/tbb/concurrent_priority_queue.h"
-#include "include/oneapi/tbb/concurrent_vector.h"
-#include "include/oneapi/tbb/parallel_sort.h"
-#include "include/oneapi/tbb/task_group.h"
-//
-//template<typename T, typename NodeEvaluator>
-//class BeamSearch {
-//public:
-//    using tree_type      = Tree<T>;
-//    using raw_node_type  = typename tree_type::raw_node_type;
-//    using safe_node_type = typename tree_type::safe_node_type;
-//    using p_raw_node     = typename tree_type::p_raw_node;
-//    using p_safe_node    = typename tree_type::p_safe_node;
-//
-//    explicit BeamSearch(tree_type &tree, NodeEvaluator eval, size_t beam_width)
-//        : m_tree(tree), m_eval(std::move(eval)), m_beam_width(beam_width) {}
-//
-//    std::vector<p_raw_node> search() {
-//        std::vector<p_raw_node> frontier{m_tree.get_root()};
-//        std::vector<p_raw_node> next_frontier;
-//
-//        while (!frontier.empty()) {
-//            next_frontier.clear();
-//
-//            for (auto &node: frontier) {
-//                auto children = node->get_children();
-//                next_frontier.insert(
-//                        next_frontier.end(),
-//                        std::make_move_iterator(children.begin()),
-//                        std::make_move_iterator(children.end()));
-//            }
-//
-//            std::sort(next_frontier.begin(), next_frontier.end(),
-//                      [this](const p_raw_node &a, const p_raw_node &b) {
-//                          return m_eval(*a) > m_eval(*b);
-//                      });
-//
-//            if (next_frontier.size() > m_beam_width) {
-//                next_frontier.resize(m_beam_width);
-//            }
-//
-//            frontier = std::move(next_frontier);
-//        }
-//
-//        return frontier;
-//    }
-//
-//private:
-//    tree_type    &m_tree;
-//    NodeEvaluator m_eval;
-//    size_t        m_beam_width;
-//};
-
-#include <functional>
-#include <tbb/concurrent_vector.h>
-#include <tbb/parallel_sort.h>
-#include <tbb/task_group.h>
-
-//template<typename T>
-//class BaseSearch {
-//public:
-//    using raw_node_type = typename Tree<T>::raw_node_type;
-//
-//    template<typename Derived, typename... Constraints>
-//    std::vector<raw_node_type *> search(Tree<T> &tree, Constraints &...constraints) {
-//        auto m_constraints = std::make_tuple(constraints...);
-//
-//        bool should_terminate = std::apply([](auto &...cs) {
-//            return (cs.should_terminate() || ...);
-//        },
-//                                           m_constraints);
-//
-//        return static_cast<Derived *>(this)->search_impl(tree, should_terminate);
-//    }
-//};
-//
-//template<typename T, typename Comparator = std::greater<>>
-//class BeamSearch {
-//public:
-//    using raw_node_type = typename Tree<T>::raw_node_type;
-//    using NodeScorePair = std::pair<raw_node_type *, double>;
-//
-//    explicit BeamSearch(Tree<T> &tree, std::function<double(raw_node_type *)> eval, unsigned int beam_width)
-//        : m_tree(tree), m_eval(std::move(eval)), m_beam_width(beam_width), m_comp() {}
-//
-//    std::vector<raw_node_type *> search() {
-//        std::vector<raw_node_type *> frontier = {m_tree.get_root()};
-//        while (!frontier.empty()) {
-//            tbb::concurrent_vector<NodeScorePair> next_frontier;
-//            tbb::task_group                       tasks;
-//
-//            for (auto node: frontier) {
-//                tasks.run([&, node] {
-//                    for (auto &child: node->get_children()) {
-//                        double score = m_eval(child.get());
-//                        next_frontier.push_back({child.get(), score});
-//                    }
-//                });
-//            }
-//
-//            tasks.wait();
-//
-//            std::vector<NodeScorePair> sorted_frontier(next_frontier.begin(), next_frontier.end());
-//            tbb::parallel_sort(sorted_frontier.begin(), sorted_frontier.end(),
-//                               [&](const NodeScorePair &a, const NodeScorePair &b) {
-//                                   return m_comp(a.second, b.second);
-//                               });
-//
-//            frontier.clear();
-//            for (size_t i = 0; i < std::min(m_beam_width, sorted_frontier.size()); ++i) {
-//                frontier.push_back(sorted_frontier[i].first);
-//            }
-//        }
-//
-//        return frontier;
-//    }
-//
-//private:
-//    Tree<T>                               &m_tree;
-//    std::function<double(raw_node_type *)> m_eval;
-//    unsigned int                           m_beam_width;
-//    Comparator                             m_comp;
-//};
-
-template<typename T>
+template<typename Derived,
+         typename T,
+         typename Float,
+         typename DerivedMetrics = EmptyMetrics,
+         typename DerivedResult  = std::optional<std::vector<typename Tree<T>::raw_node_type *>>>
 class BaseSearch {
 public:
-    using raw_node_type = typename Tree<T>::raw_node_type;
+    struct SearchMetrics {
+        std::chrono::duration<Float> search_time;
+        size_t                       iterations     = 0;
+        size_t                       nodes_explored = 0;
 
-    template<typename... Constraints>
-    std::vector<raw_node_type *> search(Tree<T> &tree, Constraints &...constraints) {
-        auto m_constraints = std::make_tuple(constraints...);
+        void update_metrics(std::chrono::duration<Float> time, size_t iters, size_t nodes) {
+            search_time += time;
+            iterations += iters;
+            nodes_explored += nodes;
+        }
 
-        bool should_terminate = std::apply([](auto &...cs) {
-            return (cs.should_terminate() || ...);
-        },
-                                           m_constraints);
+        friend std::ostream &operator<<(std::ostream &os, const SearchMetrics &m) {
+            os << "Search Time: " << m.search_time.count() << "s, "
+               << "Iterations: " << m.iterations << ", "
+               << "Nodes Explored: " << m.nodes_explored;
+            return os;
+        }
+    };
 
-        return search_impl(tree, should_terminate);
+    using search_return_type = std::pair<DerivedResult, SearchMetrics>;
+
+    template<typename Strategy, typename... Constraints>
+    search_return_type search(Tree<T> &tree, Strategy strategy, Constraints &...constraints) {
+        auto should_terminate = [&]() {
+            return (... || constraints.should_terminate());
+        };
+        return static_cast<Derived *>(this)->search_impl(tree, strategy, static_cast<std::function<bool()>>(should_terminate));
     }
 
-protected:
-    virtual std::vector<raw_node_type *> search_impl(Tree<T> &tree, bool should_terminate) = 0;
+    SearchMetrics metrics;
 };
-//
-//template<typename T, typename Comparator = std::greater<>>
-//class BeamSearch : public BaseSearch<T> {
-//public:
-//    using raw_node_type = typename Tree<T>::raw_node_type;
-//    using NodeScorePair = std::pair<raw_node_type *, double>;
-//
-//    explicit BeamSearch(std::function<double(raw_node_type *)> eval, unsigned int beam_width)
-//        : m_eval(std::move(eval)), m_beam_width(beam_width), m_comp() {}
-//
-//protected:
-//    std::vector<raw_node_type *> search_impl(Tree<T> &tree, bool should_terminate) override {
-//        std::vector<raw_node_type *> frontier = {tree.get_root()};
-//        while (!frontier.empty() && !should_terminate) {
-//            tbb::concurrent_vector<NodeScorePair> next_frontier;
-//            tbb::task_group                       tasks;
-//
-//            for (auto node: frontier) {
-//                tasks.run([&, node] {
-//                    for (auto &child: node->get_children()) {
-//                        double score = m_eval(child.get());
-//                        next_frontier.push_back({child.get(), score});
-//                    }
-//                });
-//            }
-//
-//            tasks.wait();
-//
-//            std::vector<NodeScorePair> sorted_frontier(next_frontier.begin(), next_frontier.end());
-//            tbb::parallel_sort(sorted_frontier.begin(), sorted_frontier.end(),
-//                               [&](const NodeScorePair &a, const NodeScorePair &b) {
-//                                   return m_comp(a.second, b.second);
-//                               });
-//
-//            frontier.clear();
-//            for (size_t i = 0; i < std::min(m_beam_width, sorted_frontier.size()); ++i) {
-//                frontier.push_back(sorted_frontier[i].first);
-//            }
-//        }
-//
-//        return frontier;
-//    }
-//
-//private:
-//    std::function<double(raw_node_type *)> m_eval;
-//    unsigned int                           m_beam_width;
-//    Comparator                             m_comp;
-//};
 
-template<typename T, typename Comparator = std::greater<>>
-class BeamSearch : public BaseSearch<T> {
+
+template<typename T, typename Float = double>
+class DepthFirstSearch : public BaseSearch<DepthFirstSearch<T, Float>, T, Float> {
+public:
+    using Base          = BaseSearch<DepthFirstSearch<T, Float>, T, Float>;
+    using raw_node_type = typename Tree<T>::raw_node_type;
+    using SearchMetrics = typename Base::SearchMetrics;
+
+
+    using search_return_type = typename Base::search_return_type;
+    // Define the return_type and Result
+    using return_type = raw_node_type *;
+    using Result      = return_type;
+
+    search_return_type search_impl(Tree<T>                                                     &tree,
+                                   std::function<std::pair<bool, return_type>(raw_node_type *)> process_node,
+                                   const std::function<bool()>                                 &should_terminate) {
+
+        std::stack<raw_node_type *>  stack;
+        std::vector<raw_node_type *> visited;
+
+        auto root = tree.get_root();
+        if (root) {
+            stack.push(root);
+        }
+
+        auto start_time = std::chrono::high_resolution_clock::now();
+        while (!stack.empty() && !should_terminate()) {
+            auto node = stack.top();
+            stack.pop();
+
+            visited.push_back(node);
+            auto [found, value] = process_node(node);
+            if (found) {
+                auto end_time = std::chrono::high_resolution_clock::now();
+                this->metrics.update_metrics(
+                        std::chrono::duration<Float>(end_time - start_time),
+                        visited.size(),
+                        visited.size());
+                return std::make_pair(std::optional<std::vector<raw_node_type *>>{std::vector<raw_node_type *>{value}}, this->metrics);
+            }
+
+            for (auto &child: node->get_children()) {
+                stack.push(child.get());
+            }
+        }
+        auto end_time = std::chrono::high_resolution_clock::now();
+
+        this->metrics.update_metrics(std::chrono::duration<Float>(end_time - start_time),
+                                     visited.size(), visited.size());
+
+        return std::make_pair(std::nullopt, this->metrics);
+    }
+};
+
+
+template<typename T, typename Float = double, typename Comparator = std::greater<>>
+class BeamSearch : public BaseSearch<BeamSearch<T, Float, Comparator>, T, Float> {
 public:
     using raw_node_type = typename Tree<T>::raw_node_type;
-    using NodeScorePair = std::pair<double, raw_node_type *>;
+    using NodeScorePair = std::pair<raw_node_type *, double>;
+    using Base          = BaseSearch<BeamSearch<T, Float, Comparator>, T, Float>;
+    using SearchMetrics = typename Base::SearchMetrics;
 
-    explicit BeamSearch(std::function<double(raw_node_type *)> eval, unsigned int beam_width)
-        : m_eval(std::move(eval)), m_beam_width(beam_width), m_comp() {}
+    using search_return_type = typename Base::search_return_type;
+    // Define the return_type and Result
+    using return_type = raw_node_type *;
+    using Result      = std::vector<return_type>;
 
-protected:
-    std::vector<raw_node_type *> search_impl(Tree<T> &tree, bool should_terminate) override {
-        tbb::concurrent_priority_queue<NodeScorePair, Comparator> frontier;
-        frontier.push({m_eval(tree.get_root()), tree.get_root()});
+    BeamSearch(
+            std::function<double(raw_node_type *)> eval,
+            unsigned int                           beam_width,
+            size_t                                 reserve_amount             = 1000,
+            bool                                   mark_unselected_as_visited = false)
+        : m_eval(std::move(eval)),
+          m_beam_width(beam_width),
+          m_comp(),
+          m_reserve_amount(reserve_amount),
+          m_mark_unselected_as_visited(mark_unselected_as_visited) {}
 
-        while (!frontier.empty() && !should_terminate) {
-            tbb::concurrent_priority_queue<NodeScorePair, Comparator> next_frontier;
-            tbb::task_group                                           tasks;
 
-            while (!frontier.empty() && next_frontier.size() < m_beam_width) {
-                auto [score, node] = frontier.top();
-                frontier.pop();
+    search_return_type search_impl(
+            Tree<T>                                                     &tree,
+            std::function<std::pair<bool, return_type>(raw_node_type *)> process_node,
+            const std::function<bool()>                                 &should_terminate) {
 
-                tasks.run([&, node] {
-                    for (auto &child: node->get_children()) {
-                        double score = m_eval(child.get());
-                        next_frontier.push({score, child.get()});
-                    }
+        tbb::concurrent_vector<raw_node_type *> frontier = {tree.get_root()};
+        tbb::concurrent_vector<raw_node_type *> visited;
+
+        size_t total_nodes_processed = 0;
+        size_t iterations            = 0;
+        auto   start_time            = std::chrono::high_resolution_clock::now();
+
+        while (!frontier.empty() && !should_terminate()) {
+            tbb::concurrent_vector<NodeScorePair> next_frontier;
+
+            tbb::parallel_for_each(
+                    frontier.begin(),
+                    frontier.end(),
+                    [this, &next_frontier](raw_node_type *node) {
+                        for (auto &child: node->get_children()) {
+                            double score = m_eval(child.get());
+                            next_frontier.push_back({child.get(), score});
+                        }
+                    });
+
+            tbb::parallel_sort(
+                    next_frontier.begin(),
+                    next_frontier.end(),
+                    [&](const NodeScorePair &a, const NodeScorePair &b) {
+                        return m_comp(a.second, b.second);
+                    });
+
+            // Get the start of the unvisited nodes in next_frontier.
+            auto unvisited_start = next_frontier.begin() + std::min(static_cast<size_t>(m_beam_width), next_frontier.size());
+
+            if (m_mark_unselected_as_visited) {
+                std::for_each(unvisited_start, next_frontier.end(), [&](auto &node_score_pair) {
+                    visited.push_back(node_score_pair.first);
                 });
             }
 
-            tasks.wait();
-            frontier.swap(next_frontier);
+            // Set frontier to the next set of nodes to visit.
+            frontier.clear();
+            std::transform(next_frontier.begin(),
+                           unvisited_start,
+                           std::back_inserter(frontier),
+                           [](const auto &node_score_pair) { return node_score_pair.first; });
+            total_nodes_processed += next_frontier.size();
+            iterations++;
+            next_frontier.clear();
         }
 
-        std::vector<raw_node_type *> result;
-        while (!frontier.empty()) {
-            auto [_, node] = frontier.top();
-            result.push_back(node);
-            frontier.pop();
-        }
+        auto end_time = std::chrono::high_resolution_clock::now();
+        this->metrics.update_metrics(std::chrono::duration<Float>(end_time - start_time), iterations, total_nodes_processed);
 
-        return result;
+        std::vector<raw_node_type *> visited_vector(visited.begin(), visited.end());
+        return std::make_pair(std::optional<std::vector<raw_node_type *>>(std::move(visited_vector)), this->metrics);
     }
 
 private:
     std::function<double(raw_node_type *)> m_eval;
     unsigned int                           m_beam_width;
     Comparator                             m_comp;
+    size_t                                 m_reserve_amount;
+    bool                                   m_mark_unselected_as_visited;
 };
 
-//https://chat.openai.com/c/e135a210-61eb-4a2e-9bb1-18372bf88cb9
-//enum class ParallelScheme {
-//    NoParallelism,
-//    EvalParallelism,
-//    NestedParallelism
-//};
-//
-//template<typename T, typename Comparator = std::greater<>>
-//class BeamSearch : public BaseSearch<T> {
-//    // ...
-//    explicit BeamSearch(std::function<double(raw_node_type *)> eval, unsigned int beam_width, ParallelScheme scheme)
-//        : m_eval(std::move(eval)), m_beam_width(beam_width), m_comp(), m_scheme(scheme) {}
-//    // ...
-//private:
-//    // ...
-//    ParallelScheme m_scheme;
-//};
+}// namespace odin
+#endif// ODIN_SEARCH_H

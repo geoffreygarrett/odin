@@ -57,10 +57,10 @@ cc_library(
     includes = ["include"],
     visibility = ["//visibility:public"],
     deps = [
-        ":cereal",
         "@com_github_eigen_eigen//:header_lib",
         "@com_github_gabime_spdlog//:spdlog",
         "@com_github_oneapi_onetbb//:tbb",
+        "@com_github_uscilab_cereal//:cereal",
     ],
 )
 

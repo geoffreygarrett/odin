@@ -1,9 +1,12 @@
-#ifndef ODIN_TREE_BASE_HPP
-#define ODIN_TREE_BASE_HPP
+#ifndef ODIN_TREE_BASE_H
+#define ODIN_TREE_BASE_H
 
 #include <memory>
-#include <oneapi/tbb/task_group.h>
 #include <vector>
+
+#include <oneapi/tbb/task_group.h>
+
+namespace odin {
 
 template<typename T>
 class RawNode;
@@ -11,7 +14,12 @@ class RawNode;
 template<typename T>
 class SafeNode;
 
-template<typename Derived, typename T, template<typename, typename...> class ParentPtrType, template<typename, typename...> class ChildPtrType>
+template<typename Derived,
+         typename T,
+         template<typename, typename...>
+         class ParentPtrType,
+         template<typename, typename...>
+         class ChildPtrType>
 struct NodeTrait {
     using p_parent = ParentPtrType<Derived>;
     using p_child  = ChildPtrType<Derived>;
@@ -31,67 +39,81 @@ public:
     using p_child       = typename Trait::p_child;
     using children_type = std::vector<p_child>;
 
-    T                  m_data;
-    p_parent           m_parent;
-    children_type      m_children;
-    mutable std::mutex m_mutex;
 
     explicit NodeBase(const T &data) : m_data(data) {}
 
+    void update_levels(Derived *node, int level) {
+        node->m_level = level;
+        for (auto &child: node->get_children()) {
+            update_levels(child, level + 1);
+        }
+    }
+
+    Derived &as_derived() {
+        return static_cast<Derived &>(*this);
+    }
+
+    const Derived &as_derived() const {
+        return static_cast<const Derived &>(*this);
+    }
+
     std::shared_ptr<SafeNode<T>> to_safe() {
-        return static_cast<Derived *>(this)->to_safe_impl();
+        return as_derived().to_safe_impl();
     }
 
     std::shared_ptr<SafeNode<T>> to_safe() const {
-        return static_cast<const Derived *>(this)->to_safe_impl();
+        return as_derived().to_safe_impl();
     }
 
     std::unique_ptr<RawNode<T>> to_raw() {
-        return static_cast<Derived *>(this)->to_raw_impl();
+        return as_derived().to_raw_impl();
     }
 
     void add_child(p_child child) {
-        static_cast<Derived *>(this)->add_child_impl(std::move(child));
+        child->m_level = m_level + 1;
+        as_derived().add_child_impl(std::move(child));
     }
 
     [[nodiscard]] bool has_parent() const {
-        return static_cast<const Derived *>(this)->has_parent_impl();
+        return as_derived().has_parent_impl();
     }
 
     void set_parent(p_parent parent) {
-        static_cast<Derived *>(this)->set_parent_impl(std::move(parent));
+        as_derived().set_parent_impl(std::move(parent));
+        m_level = as_derived().get_parent_level() + 1;
     }
 
-    const T &get_data() const {
+    [[nodiscard]] size_t get_parent_level() const {
+        return as_derived().get_parent_level_impl();
+    }
+
+    [[nodiscard]] const T &get_data() const {
         return m_data;
     }
 
-    p_parent get_parent() const {
+    [[nodiscard]] p_parent get_parent() const {
         return m_parent;
     }
 
-    const children_type &get_children() const {
+    [[nodiscard]] size_t get_level() const {
+        return m_level;
+    }
+
+    [[nodiscard]] const children_type &get_children() const {
         return m_children;
     }
 
-    void remove_child(p_child child) {
-        static_cast<Derived *>(this)->remove_child_impl(std::move(child));
+    p_child remove_child(Derived *child) {
+        return as_derived().remove_child_impl(child);
     }
 
-    void add_child_mt(p_child child) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        add_child(std::move(child));
-    }
-
-    void remove_child_mt(p_child child) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        remove_child(std::move(child));
+    p_child clone() const {
+        return as_derived().clone_impl();
     }
 
     [[nodiscard]] size_t get_node_count() const {
-        size_t count = 1;// This node itself
-        for (const auto &child: m_children)
-            count += child->get_node_count();
+        size_t count = 1;
+        for (const auto &child: m_children) count += child->get_node_count();
         return count;
     }
 
@@ -111,13 +133,25 @@ public:
 
     [[nodiscard]] size_t get_non_leaf_node_count() const {
         if (m_children.empty()) return 0;
-
-        size_t count = 1;// Count this node because it is non-leaf
-        for (const auto &child: m_children)
-            count += child->get_non_leaf_node_count();
-
+        size_t count = 1;
+        for (const auto &child: m_children) count += child->get_non_leaf_node_count();
         return count;
     }
+
+    [[nodiscard]] T &get_data_ref() {
+        return m_data;
+    }
+
+    T *get_data_ptr() {
+        return &m_data;
+    }
+
+
+protected:
+    size_t        m_level = 0;// Add a level property
+    T             m_data;
+    p_parent      m_parent;
+    children_type m_children;
 };
 
 template<typename T>
@@ -126,9 +160,7 @@ public:
     using base_type = NodeBase<RawNode<T>, T, RawNodeTrait<T>>;
     using base_type::base_type;
 
-    explicit RawNode(const T &data) : base_type(data) {
-        this->m_parent = nullptr;
-    }
+    explicit RawNode(const T &data) : base_type(data) { this->m_parent = nullptr; }
 
     std::shared_ptr<SafeNode<T>> to_safe_impl() const {
         auto safe_node = std::make_shared<SafeNode<T>>(this->m_data);
@@ -154,22 +186,42 @@ public:
         this->m_children.emplace_back(std::move(child));
     }
 
-    [[nodiscard]] bool has_parent_impl() const {
-        return this->m_parent != nullptr;
+    [[nodiscard]] size_t get_parent_level_impl() const {
+        if (this->get_parent()) {
+            return this->get_parent()->m_level;
+        } else {
+            return 0;// or whatever value makes sense for no parent
+        }
     }
 
-    void set_parent_impl(base_type::p_parent parent) {
-        this->m_parent = parent;
-    }
+    [[nodiscard]] bool has_parent_impl() const { return this->m_parent != nullptr; }
 
-    void remove_child(RawNode<int> *child) {
-        auto it = std::find_if(this->m_children.begin(), this->m_children.end(),
-                               [child](const auto &unique_ptr) { return unique_ptr.get() == child; });
+    void set_parent_impl(base_type::p_parent parent) { this->m_parent = parent; }
+
+    typename base_type::p_child remove_child_impl(RawNode<T> *child) {
+        auto it = std::find_if(
+                this->m_children.begin(),
+                this->m_children.end(),
+                [child](const auto &unique_ptr) { return unique_ptr.get() == child; });
 
         if (it != this->m_children.end()) {
+            // Unset parent from child node
             (*it)->m_parent = nullptr;
+            // Save child to return to caller
+            auto removedChild = std::move(*it);
+            // Remove child from this node's children
             this->m_children.erase(it);
+            // Return child to caller
+            return removedChild;
         }
+        // Return nullptr if child was not found
+        return nullptr;
+    }
+
+    std::unique_ptr<RawNode<T>> clone_impl() const {
+        auto cloned_node = std::make_unique<RawNode<T>>(this->m_data);
+        for (const auto &child: this->m_children) cloned_node->add_child(child->clone());
+        return cloned_node;
     }
 };
 
@@ -205,21 +257,42 @@ public:
         this->m_children.push_back(child);
     }
 
-    [[nodiscard]] bool has_parent_impl() const {
-        return !this->m_parent.expired();
-    }
-
-    void set_parent_impl(base_type::p_parent parent) {
-        this->m_parent = parent;
-    }
-
-    void remove_child_impl(base_type::p_child child) {
-        auto it = std::find(this->m_children.begin(), this->m_children.end(), child);
-        if (it != this->m_children.end()) {
-            // remove parent
-            (*it)->m_parent.reset();
-            this->m_children.erase(it);
+    [[nodiscard]] size_t get_parent_level_impl() const {
+        if (auto parent = this->m_parent.lock()) {
+            return parent->get_level();
+        } else {
+            return 0;// or whatever value makes sense for no parent
         }
+    }
+
+    [[nodiscard]] bool has_parent_impl() const { return !this->m_parent.expired(); }
+
+    void set_parent_impl(base_type::p_parent parent) { this->m_parent = parent; }
+
+    typename base_type::p_child remove_child_impl(SafeNode<T> *child) {
+        auto it = std::find_if(
+                this->m_children.begin(),
+                this->m_children.end(),
+                [child](const auto &shared_ptr) { return shared_ptr.get() == child; });
+
+        if (it != this->m_children.end()) {
+            // Unset parent from child node
+            (*it)->m_parent.reset();
+            // Save child to return to caller
+            auto removedChild = std::move(*it);
+            // Remove child from this node's children
+            this->m_children.erase(it);
+            // Return child to caller
+            return removedChild;
+        }
+        // Return nullptr if child was not found
+        return nullptr;
+    }
+
+    std::shared_ptr<SafeNode<T>> clone_impl() const {
+        auto cloned_node = std::make_shared<SafeNode<T>>(this->m_data);
+        for (const auto &child: this->m_children) cloned_node->add_child(child->clone());
+        return cloned_node;
     }
 };
 
@@ -227,51 +300,50 @@ public:
 template<typename T>
 class Tree {
 public:
+    // Aliases for easier reference
     using raw_node_type  = RawNode<T>;
     using safe_node_type = SafeNode<T>;
     using p_raw_node     = std::unique_ptr<raw_node_type>;
     using p_safe_node    = std::shared_ptr<safe_node_type>;
 
-    explicit Tree(const raw_node_type &node) : m_root(std::make_unique<raw_node_type>(node)) {}
-    explicit Tree(const safe_node_type &node) : m_root(node.to_raw()) {}
 
-    raw_node_type *get_root() const {
-        return m_root.get();
+    // Construct tree with unique pointer to raw node
+    explicit Tree(p_raw_node node) : m_root(std::move(node)) {}
+
+    // Construct tree with shared pointer to safe node
+    explicit Tree(const safe_node_type &node) : m_root(node->to_raw()) {}
+
+    // Get root of tree as raw pointer. User should not delete this pointer.
+    raw_node_type *get_root() const { return m_root.get(); }
+
+    // Get root of tree as safe (shared) pointer
+    p_safe_node get_safe_root() const { return m_root->to_safe(); }
+
+    void add_child(raw_node_type *parent, p_raw_node child) {
+        parent->add_child(std::move(child));
     }
 
-    p_safe_node get_safe_root() const {
-        return m_root->to_safe();
+    p_raw_node remove_child(raw_node_type *parent, raw_node_type *child) {
+        return parent->remove_child(child);
     }
 
-    void parallel_in_order_traversal(std::function<void(const T &)> visit) {
-        tbb::task_group group;
-
-        auto worker = [&visit](p_raw_node node) {
-            if (node) {
-                node->parallel_in_order_traversal(visit);
-            }
-        };
-
-        for (auto &child: m_root->get_children()) {
-            group.run([=]() { worker(std::move(child)); });
-        }
-
-        group.wait();
-    }
-
+    // Add a child to a parent node. Thread-safe.
+    // Transfers ownership of child from caller to Tree.
     void add_child_mt(raw_node_type *parent, p_raw_node child) {
         std::lock_guard<std::mutex> lock(m_tree_mutex);
         parent->add_child(std::move(child));
     }
 
-    void remove_child_mt(raw_node_type *parent, p_raw_node child) {
+    // Remove a child from a parent node. Thread-safe.
+    // Transfers ownership of child from Tree to caller.
+    p_raw_node remove_child_mt(raw_node_type *parent, raw_node_type *child) {
         std::lock_guard<std::mutex> lock(m_tree_mutex);
-        parent->remove_child(std::move(child));
+        return parent->remove_child(child);
     }
 
 private:
-    p_raw_node         m_root;
-    mutable std::mutex m_tree_mutex;
+    p_raw_node         m_root;      // Root of the tree
+    mutable std::mutex m_tree_mutex;// Mutex to protect tree from simultaneous modifications
 };
 
 
@@ -343,4 +415,5 @@ private:
 //    }
 //};
 
-#endif//ODIN_TREE_BASE_H
+}// namespace odin
+#endif// ODIN_TREE_BASE_H

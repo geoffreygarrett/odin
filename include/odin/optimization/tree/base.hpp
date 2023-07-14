@@ -246,7 +246,6 @@ struct NodeBase {
         return ((static_cast<const Derived &>(*this).children_size() == 0) || this->is_leaf);
     }
 
-    //     default constructor for cereal deserialization
     NodeBase() = default;
 
     NodeBase(State                 state,
@@ -345,8 +344,8 @@ struct Node : NodeBase<Node<State, Action, Reward>, State, Action, Reward> {
     Node(const Node &other)
         : NodeBase<Node, State, Action, Reward>(other) {
         for (const auto &child: other.children) {
-            auto new_child = std::make_unique<Node>(*child);
-            new_child->parent = this;  // update parent pointer
+            auto new_child    = std::make_unique<Node>(*child);
+            new_child->parent = this;// update parent pointer
             this->children.push_back(std::move(new_child));
         }
     }
@@ -359,39 +358,39 @@ struct Node : NodeBase<Node<State, Action, Reward>, State, Action, Reward> {
         return convert_node_to_py_node(*this);
     }
 
-//    // Serialization function definition
-//    template<class Archive>
-//    void serialize_derived(Archive &ar) {
-//        ar(cereal::make_nvp("children", children));
-//    }
-//
-//    template<class Archive>
-//    static void
-//    load_and_construct_derived(Archive                                        &ar,
-//                               cereal::construct<Node<State, Action, Reward>> &construct,
-//                               State                                          &state,
-//                               std::optional<Action>                          &action,
-//                               RunningStats<Reward>                           &reward_stats,
-//                               size_t                                          visit_count,
-//                               size_t                                          update_count,
-//                               bool                                            is_terminal,
-//                               bool                                            is_leaf) {
-//        std::vector<std::unique_ptr<Node<State, Action, Reward>>> children;
-//        std::weak_ptr<PyNode<State, Action, Reward>>              parent;
-//
-//        // Call deserialize on parent and children
-//        ar(cereal::make_nvp("children", children));
-//
-//        // Call construct on the PyNode
-//        construct(state,
-//                  action,
-//                  nullptr,
-//                  reward_stats,
-//                  visit_count,
-//                  update_count,
-//                  is_terminal,
-//                  is_leaf);
-//    }
+    //    // Serialization function definition
+    //    template<class Archive>
+    //    void serialize_derived(Archive &ar) {
+    //        ar(cereal::make_nvp("children", children));
+    //    }
+    //
+    //    template<class Archive>
+    //    static void
+    //    load_and_construct_derived(Archive                                        &ar,
+    //                               cereal::construct<Node<State, Action, Reward>> &construct,
+    //                               State                                          &state,
+    //                               std::optional<Action>                          &action,
+    //                               RunningStats<Reward>                           &reward_stats,
+    //                               size_t                                          visit_count,
+    //                               size_t                                          update_count,
+    //                               bool                                            is_terminal,
+    //                               bool                                            is_leaf) {
+    //        std::vector<std::unique_ptr<Node<State, Action, Reward>>> children;
+    //        std::weak_ptr<PyNode<State, Action, Reward>>              parent;
+    //
+    //        // Call deserialize on parent and children
+    //        ar(cereal::make_nvp("children", children));
+    //
+    //        // Call construct on the PyNode
+    //        construct(state,
+    //                  action,
+    //                  nullptr,
+    //                  reward_stats,
+    //                  visit_count,
+    //                  update_count,
+    //                  is_terminal,
+    //                  is_leaf);
+    //    }
 };
 
 

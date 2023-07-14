@@ -25,7 +25,7 @@ namespace odin {
     }
 
     template<typename T>
-    void save_to_json(const T &object, const std::string &filename) {
+    void save_json(const T &object, const std::string &filename) {
         std::ofstream ofs(filename);
         if (ofs) {
             ofs << to_json(object);
@@ -48,7 +48,7 @@ namespace odin {
     }
 
     template<typename T>
-    T load_from_json(const std::string &filename) {
+    T load_json(const std::string &filename) {
         std::ifstream ifs(filename);
         if (!ifs) {
             throw std::runtime_error("Failed to open the file: " + filename);
@@ -71,10 +71,11 @@ namespace odin {
     }
 
     template<typename T>
-    void save_to_binary(const T &object, const std::string &filename, bool portable = false) {
+    void save_binary(const T &object, const std::string &filename, bool portable = false) {
         std::ofstream ofs(filename, std::ios::binary);
         if (ofs) {
-            ofs << to_binary(object, portable);
+            std::string binary_str = to_binary(object, portable);
+            ofs.write(binary_str.data(), static_cast<std::streamsize>(binary_str.size()));
             ofs.close();
         } else {
             throw std::runtime_error("Failed to open the file: " + filename);
@@ -96,7 +97,7 @@ namespace odin {
     }
 
     template<typename T>
-    T load_from_binary(const std::string &filename, bool portable = false) {
+    T load_binary(const std::string &filename, bool portable = false) {
         std::ifstream ifs(filename, std::ios::binary);
         if (!ifs) {
             throw std::runtime_error("Failed to open the file: " + filename);
@@ -118,7 +119,7 @@ namespace odin {
     }
 
     template<typename T>
-    void save_to_xml(const T &object, const std::string &filename) {
+    void save_xml(const T &object, const std::string &filename) {
         std::ofstream ofs(filename);
         if (ofs) {
             ofs << to_xml(object);
@@ -140,7 +141,7 @@ namespace odin {
     }
 
     template<typename T>
-    T load_from_xml(const std::string &filename) {
+    T load_xml(const std::string &filename) {
         std::ifstream ifs(filename);
         if (!ifs) {
             throw std::runtime_error("Failed to open the file: " + filename);

@@ -2,7 +2,7 @@
 BasedOnStyle: LLVM
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
-AlignConsecutiveAssignments:  # Consecutive
+AlignConsecutiveAssignments: # Consecutive
   Enabled: true
   PadOperators: false
 AlignArrayOfStructures: Right
@@ -45,7 +45,8 @@ IndentPPDirectives: None
 IndentWidth: 4
 KeepEmptyLinesAtTheStartOfBlocks: true
 MaxEmptyLinesToKeep: 2
-NamespaceIndentation: All
+#NamespaceIndentation: All
+NamespaceIndentation: None
 ObjCSpaceAfterProperty: false
 ObjCSpaceBeforeProtocolList: true
 PointerAlignment: Right
