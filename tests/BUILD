@@ -175,6 +175,33 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "test_vectorize",
+    srcs = ["test_vectorize.cpp"],
+    deps = [
+        ":gtest_main",
+        "@//:odin",
+    ],
+)
+
+cc_test(
+    name = "test_parallel",
+    srcs = ["test_parallel.cpp"],
+    deps = [
+        ":gtest_main",
+        "@//:odin",
+    ],
+)
+
+cc_test(
+    name = "test_linalg",
+    srcs = ["test_linalg/test_basics.cpp"],
+    deps = [
+        ":gtest_main",
+        "@//:odin",
+    ],
+)
+
 # All tests target
 test_suite(
     name = "all_tests",

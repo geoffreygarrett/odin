@@ -15,7 +15,7 @@ build --cxxopt=-std=c++20
 build --jobs=20
 
 # Building with optimization and verbose on failures.
-build -c opt --verbose_failures
+build -c opt # --verbose_failures
 
 
 # Set test output to be streamed directly to the console.

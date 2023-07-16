@@ -138,6 +138,30 @@ public:
         return count;
     }
 
+//    [[nodiscard]] p_parent get_siblings() {
+//        return as_derived().get_siblings_impl();
+//    }
+//
+//    [[nodiscard]] p_parent get_siblings() const {
+//        return as_derived().get_siblings_impl();
+//    }
+
+    [[nodiscard]] bool is_leaf() const {
+        return m_children.empty();
+    }
+
+    [[nodiscard]] bool is_root() const {
+        return !has_parent();
+    }
+
+//    [[nodiscard]] bool is_valid() const {
+//        return as_derived().is_valid_impl();
+//    }
+//
+//    [[nodiscard]] bool is_valid() {
+//        return as_derived().is_valid_impl();
+//    }
+
     [[nodiscard]] T &get_data_ref() {
         return m_data;
     }
@@ -208,11 +232,11 @@ public:
             // Unset parent from child node
             (*it)->m_parent = nullptr;
             // Save child to return to caller
-            auto removedChild = std::move(*it);
+            auto removed_child = std::move(*it);
             // Remove child from this node's children
             this->m_children.erase(it);
             // Return child to caller
-            return removedChild;
+            return removed_child;
         }
         // Return nullptr if child was not found
         return nullptr;
@@ -279,11 +303,11 @@ public:
             // Unset parent from child node
             (*it)->m_parent.reset();
             // Save child to return to caller
-            auto removedChild = std::move(*it);
+            auto removed_child = std::move(*it);
             // Remove child from this node's children
             this->m_children.erase(it);
             // Return child to caller
-            return removedChild;
+            return removed_child;
         }
         // Return nullptr if child was not found
         return nullptr;
@@ -295,23 +319,52 @@ public:
         return cloned_node;
     }
 };
+//
+//template<typename T>
+//class NodeView {
+//private:
+//    RawNode<T> *m_node;
+//
+//    class NodeMediator {
+//    };
+//
+//public:
+//    [[nodiscard]] bool is_valid() const {
+//        return m_node != nullptr;
+//    }
+//
+//    [[nodiscard]] bool is_valid_else_throw() const {
+//        if (!is_valid()) {
+//            throw std::runtime_error("NodeView is not valid");
+//        }
+//        return true;
+//    }
+//
+//    bool is_valid_then(NodeContainer container) const {
+//        if (!is_valid()) {
+//            return false;
+//        }
+//        return true;
+//    }
+//};
 
 
 template<typename T>
 class Tree {
 public:
+    // TODO: Implement a "NodeView" concept that allows for efficient traversal of the tree,
+    //   without the need to copy the entire tree.
     // Aliases for easier reference
     using raw_node_type  = RawNode<T>;
     using safe_node_type = SafeNode<T>;
     using p_raw_node     = std::unique_ptr<raw_node_type>;
     using p_safe_node    = std::shared_ptr<safe_node_type>;
 
-
     // Construct tree with unique pointer to raw node
     explicit Tree(p_raw_node node) : m_root(std::move(node)) {}
 
     // Construct tree with shared pointer to safe node
-    explicit Tree(const safe_node_type &node) : m_root(node->to_raw()) {}
+    explicit Tree(const p_safe_node &node) : Tree(node->to_raw()) {}
 
     // Get root of tree as raw pointer. User should not delete this pointer.
     raw_node_type *get_root() const { return m_root.get(); }
@@ -323,7 +376,15 @@ public:
         parent->add_child(std::move(child));
     }
 
+    void add_child(p_safe_node parent, p_safe_node child) {
+        parent->add_child(std::move(child));
+    }
+
     p_raw_node remove_child(raw_node_type *parent, raw_node_type *child) {
+        return parent->remove_child(child);
+    }
+
+    p_safe_node remove_child(p_safe_node parent, p_safe_node child) {
         return parent->remove_child(child);
     }
 

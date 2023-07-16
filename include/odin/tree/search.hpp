@@ -20,6 +20,46 @@ namespace odin {
 // Empty struct used as a default argument for DerivedMetrics
 struct EmptyMetrics {};
 
+template<typename Float>
+class SearchMetrics {
+public:
+    std::chrono::duration<Float> search_time    = std::chrono::duration<Float>::zero();
+    size_t                       iterations     = 0;
+    size_t                       nodes_explored = 0;
+
+    friend std::ostream &operator<<(std::ostream &os, const SearchMetrics &m) {
+        os << "Search Time: " << m.search_time.count() << "s, "
+           << "Iterations: " << m.iterations << ", "
+           << "Nodes Explored: " << m.nodes_explored;
+        return os;
+    }
+};
+
+template<typename Float>
+class SearchTracker {
+public:
+    void start() {
+        m_start_time = std::chrono::high_resolution_clock::now();
+    }
+
+    void reset() {
+        m_metrics = SearchMetrics<Float>();
+    }
+
+    [[nodiscard]] SearchMetrics<Float> end(size_t iters, size_t nodes) {
+        auto end_time = std::chrono::high_resolution_clock::now();
+        m_metrics.search_time += std::chrono::duration<Float>(end_time - m_start_time);
+        m_metrics.iterations += iters;
+        m_metrics.nodes_explored += nodes;
+        auto metrics = m_metrics;
+        reset();
+        return metrics;
+    }
+
+private:
+    std::chrono::high_resolution_clock::time_point m_start_time;
+    SearchMetrics<Float>                           m_metrics;
+};
 
 template<typename Derived,
          typename T,

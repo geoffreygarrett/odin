@@ -9,6 +9,7 @@
 #include <cereal/types/map.hpp>
 #include <cereal/types/memory.hpp>
 #include <cereal/types/vector.hpp>
+#include <chrono>
 
 #include "base.hpp"
 #include <algorithm>
@@ -125,7 +126,7 @@ public:
     }
 };
 
-struct SearchMetrics {
+struct MCTSSearchMetrics {
     double_t search_seconds;
     size_t   search_iterations;
     size_t   fevals_transitions_evaluated;
@@ -134,8 +135,8 @@ struct SearchMetrics {
     size_t   fevals_terminal_checks;
     size_t   fevals_selection_policy;
 
-    friend std::ostream &operator<<(std::ostream &os, const SearchMetrics &metrics) {
-        os << "SearchMetrics(";
+    friend std::ostream &operator<<(std::ostream &os, const MCTSSearchMetrics &metrics) {
+        os << "MCTSSearchMetrics(";
         os << "search_seconds: " << metrics.search_seconds;
         os << ", search_iterations: " << metrics.search_iterations;
         os << ", fevals_transitions_evaluated: " << metrics.fevals_transitions_evaluated;
@@ -147,7 +148,7 @@ struct SearchMetrics {
         return os;
     }
 
-    bool operator==(const SearchMetrics &other) const {
+    bool operator==(const MCTSSearchMetrics &other) const {
         return (search_seconds == other.search_seconds)
             && (search_iterations == other.search_iterations)
             && (fevals_transitions_evaluated == other.fevals_transitions_evaluated)
@@ -195,7 +196,7 @@ public:
     fn_reward           mfn_reward;
     fn_selection_policy mfn_selection_policy;
 
-    using search_result_type = std::tuple<trajectory_type, SearchMetrics>;
+    using search_result_type = std::tuple<trajectory_type, MCTSSearchMetrics>;
     std::mt19937 engine;
 
 
@@ -311,13 +312,13 @@ public:
             && (mfn_selection_policy != nullptr);
     }
 
-//    explicit MCTS(std::shared_ptr<node_type> root) : Base(root),
-//                                                     engine(std::random_device{}()),
-//                                                     fevals_transitions_evaluated(0),
-//                                                     fevals_rewards_evaluated(0),
-//                                                     fevals_actions_generated(0),
-//                                                     fevals_terminal_checks(0),
-//                                                     fevals_selection_policy(0) {}
+    //    explicit MCTS(std::shared_ptr<node_type> root) : Base(root),
+    //                                                     engine(std::random_device{}()),
+    //                                                     fevals_transitions_evaluated(0),
+    //                                                     fevals_rewards_evaluated(0),
+    //                                                     fevals_actions_generated(0),
+    //                                                     fevals_terminal_checks(0),
+    //                                                     fevals_selection_policy(0) {}
 
     explicit MCTS(node_type *node) : Base(node),
                                      engine(std::random_device{}()),
@@ -617,7 +618,7 @@ public:
         }
 
         // After time limit is reached, return the best node from the root according to a policy (e.g., the node with the highest value).
-        SearchMetrics metrics{};
+        MCTSSearchMetrics metrics{};
         metrics.search_iterations            = iterations;
         metrics.search_seconds               = duration_cast<duration<double>>(steady_clock::now() - start_time).count();
         metrics.fevals_actions_generated     = this->fevals_actions_generated;

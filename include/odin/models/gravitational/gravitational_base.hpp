@@ -2,9 +2,9 @@
 #define GRAVITATIONAL_BASE_HPP
 
 #include <Eigen/Core>
+#include <odin/parallel/parallel.hpp>
 #include <tbb/tbb.h>
 #include <unsupported/Eigen/CXX11/Tensor>
-
 
 template<typename T, size_t Dim = 3>
 concept GravitationalConcept = requires(T a, const Eigen::Vector<typename T::Scalar, Dim> &position) {
@@ -28,15 +28,14 @@ class GravitationalModelBase {
 public:
     using VectorType = Eigen::Matrix<Scalar, Dim, 1>;
 
-// destructor
+    // destructor
     virtual ~GravitationalModelBase() = default;
 
     // 3D version
     Eigen::Tensor<Scalar, 3> calculate_potentials(
             const Eigen::Tensor<Scalar, 3> &x_grid,
             const Eigen::Tensor<Scalar, 3> &y_grid,
-            const Eigen::Tensor<Scalar, 3> &z_grid
-    ) const {
+            const Eigen::Tensor<Scalar, 3> &z_grid) const {
         assert(x_grid.dimensions() == y_grid.dimensions() && x_grid.dimensions() == z_grid.dimensions());
 
         const auto &dims = x_grid.dimensions();
@@ -50,8 +49,7 @@ public:
 
         // parallel calculation
         calculate_in_parallel<Eigen::Tensor<Scalar, 3>>(
-                x_grid, y_grid, z_grid, fn, potential_grid
-        );
+                x_grid, y_grid, z_grid, fn, potential_grid);
 
         return potential_grid;
     }
@@ -60,8 +58,7 @@ public:
     Eigen::Tensor<Scalar, 4> calculate_accelerations(
             const Eigen::Tensor<Scalar, 3> &x_grid,
             const Eigen::Tensor<Scalar, 3> &y_grid,
-            const Eigen::Tensor<Scalar, 3> &z_grid
-    ) const {
+            const Eigen::Tensor<Scalar, 3> &z_grid) const {
         assert(x_grid.dimensions() == y_grid.dimensions() && x_grid.dimensions() == z_grid.dimensions());
 
         const auto &dims = x_grid.dimensions();
@@ -75,8 +72,7 @@ public:
 
         // parallel calculation
         calculate_in_parallel<Eigen::Tensor<Scalar, 4>>(
-                x_grid, y_grid, z_grid, fn, acceleration_grid
-        );
+                x_grid, y_grid, z_grid, fn, acceleration_grid);
 
         return acceleration_grid;
     }
@@ -92,9 +88,8 @@ private:
             const Eigen::Tensor<Scalar, 3> &x_grid,
             const Eigen::Tensor<Scalar, 3> &y_grid,
             const Eigen::Tensor<Scalar, 3> &z_grid,
-            Callable &&calculate_fn,
-            OutputTensorType &output_grid
-    ) const {
+            Callable                      &&calculate_fn,
+            OutputTensorType               &output_grid) const {
         static_assert(OutputTensorType::NumDimensions == 3 || OutputTensorType::NumDimensions == 4,
                       "OutputTensorType must be 3D or 4D.");
 
@@ -123,10 +118,8 @@ private:
                             }
                         }
                     }
-                }
-        );
+                });
     }
-
 };
 
 #endif// GRAVITATIONAL_BASE_HPP

@@ -11,8 +11,10 @@
 #include <cereal/archives/json.hpp>
 #include <cereal/archives/portable_binary.hpp>
 #include <cereal/archives/xml.hpp>
+#include <cereal/types/chrono.hpp>
 #include <cereal/types/memory.hpp>
 #include <cereal/types/vector.hpp>
+#include <odin/tree/search.hpp>
 
 using namespace odin;
 
@@ -84,6 +86,14 @@ void serialize(Archive &archive, Tree<T> &tree) {
     //        if constexpr (has_serialized_derived<Archive>::value) {
     //            static_cast<Derived &>(tree).serialized_derived(archive);
     //        }
+}
+
+// Cereal serialization
+template<class Archive, typename Float>
+void serialize(Archive &archive, SearchMetrics<Float> &metrics) {
+    archive(cereal::make_nvp("search_time", metrics.search_time),
+            cereal::make_nvp("iterations", metrics.iterations),
+            cereal::make_nvp("nodes_explored", metrics.nodes_explored));
 }
 
 }// namespace cereal
