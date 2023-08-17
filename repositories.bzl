@@ -1,13 +1,78 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
-def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True):
+def polyhedral_gravity_dependencies():
+    maybe(
+        git_repository,
+        name = "com_github_nvidia_thrust",
+        remote = "https://github.com/NVIDIA/thrust.git",
+        commit = "3cd56842c94de4926157f6ccdfbbf03ef7e5d5dc",
+        init_submodules = True,  # Make sure to pull in any submodules
+        build_file = "@odin//:external/thrust.BUILD",
+    )
+    maybe(
+        # https://github.com/esa/polyhedral-gravity-model/releases/tag/v1.2.1
+        http_archive,
+        name = "com_github_jbeder_yaml_cpp",
+        urls = ["https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.7.0.zip"],
+        strip_prefix = "yaml-cpp-yaml-cpp-0.7.0",
+        sha256 = "4d5e664a7fb2d7445fc548cc8c0e1aa7b1a496540eb382d137e2cc263e6d3ef5",
+    )
+
+    maybe(
+        git_repository,
+        name = "com_github_xtensor_stack_xsimd",
+        remote = "https://github.com/xtensor-stack/xsimd.git",
+        #        commit = "e6fa5aca6320d6ccaf24c123ab2af9b0f2f09cc1",
+        commit = "1577b02d549cca52aa5e943c16f2600950480289",
+        #        tag = "8.1.0",
+        build_file = "@odin//:external/xsimd.BUILD",
+    )
+    #    FetchContent_Declare(xsimd
+    #            GIT_REPOSITORY https://github.com/xtensor-stack/xsimd.git
+    #            GIT_TAG 8.1.0
+    #            )
+    #    maybe(
+    #        git_repository,
+    #        name = "com_github_xtensor_stack_xsimd",
+    #        remote = "https://github.com/xtensor-stack/xsimd.git",
+    #        #        commit = "e6fa5aca6320d6ccaf24c123ab2af9b0f2f09cc1",
+    #        commit = "8ffcae81fc57a6cd05abddc2cdf573bda7c7d44a",
+    #        build_file = "@odin//:external/xsimd.BUILD",
+    #    )
+
+    maybe(
+        git_repository,
+        name = "com_github_libigl_tetgen",
+        remote = "https://github.com/libigl/tetgen.git",
+        commit = "4f3bfba3997f20aa1f96cfaff604313a8c2c85b6",
+        build_file = "@odin//:external/tetgen.BUILD",
+    )
+    maybe(
+        http_archive,
+        name = "com_github_oneapi_onetbb",
+        sha256 = "fcebb93cb9f7e882f62cd351b1c093dbefdcae04b616227dc716b0a5efa9e8ab",
+        strip_prefix = "oneTBB-2021.9.0",
+        build_file = "@odin//:external/tbb.BUILD",
+        urls = ["https://github.com/oneapi-src/oneTBB/archive/v2021.9.0.zip"],
+    )
+
+def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True, thrust = True):
     maybe(
         http_archive,
         name = "rules_pkg",
         sha256 = "360c23a88ceaf7f051abc99e2e6048cf7fe5d9af792690576554a88b2013612d",
         strip_prefix = "rules_pkg-0.9.1",
         urls = ["https://github.com/bazelbuild/rules_pkg/archive/0.9.1.tar.gz"],
+    )
+    maybe(
+        http_file,
+        name = "eros_50k_ply",
+        urls = ["https://3d-asteroids.space/data/asteroids/models/e/433_Eros_50k.ply"],
+        downloaded_file_path = "eros_50k.ply",
+        #        sha256 = "<sha256-value>",  # You'll need to calculate the sha256 value for the file
     )
 
     #    if spdlog:
@@ -18,6 +83,49 @@ def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True):
         build_file = "@odin//:external/spdlog.BUILD",
         sha256 = "ca5cae8d6cac15dae0ec63b21d6ad3530070650f68076f3a4a862ca293a858bb",
         strip_prefix = "spdlog-1.11.0",
+    )
+
+    #    if thrust:
+    maybe(
+        http_archive,
+        name = "rules_cuda",
+        sha256 = "dc1f4f704ca56e3d5edd973f98a45f0487d0f28c689d0a57ba236112148b1833",
+        strip_prefix = "rules_cuda-v0.1.2",
+        urls = ["https://github.com/bazel-contrib/rules_cuda/releases/download/v0.1.2/rules_cuda-v0.1.2.tar.gz"],
+    )
+
+    polyhedral_gravity_dependencies()
+
+    maybe(
+        # https://github.com/esa/polyhedral-gravity-model/releases/tag/v1.2.1
+        git_repository,
+        name = "com_github_esa_polyhedral_gravity_model",
+        remote = "https://github.com/geoffreygarrett/polyhedral-gravity-model.git",
+        commit = "2b218d5ed2943a86f5adf0fa9c1399a4a0358594",
+        build_file = "@odin//:external/polyhedral_gravity_model.BUILD",
+    )
+
+    #    native.local_repository(
+    #        name = "com_github_esa_polyhedral_gravity_model",
+    #        path = "@odin//external/polyhedral-gravity-model",
+    #    )
+    #
+    #    native.alias(
+    #        name = "com_github_esa_polyhedral_gravity_model",
+    #        actual = "@odin//external/polyhedral-gravity-model",
+    #    )
+
+    #    maybe(
+    #        local_repository,
+    #    )
+
+    maybe(
+        git_repository,
+        name = "com_github_nvidia_thrust",
+        remote = "https://github.com/NVIDIA/thrust.git",
+        commit = "3cd56842c94de4926157f6ccdfbbf03ef7e5d5dc",
+        init_submodules = True,  # Make sure to pull in any submodules
+        build_file = "@odin//:external/thrust.BUILD",
     )
 
     #    if fmtlib:

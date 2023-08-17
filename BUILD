@@ -21,6 +21,21 @@ create_aliases(
     ALIASES,
     visibility = ["//visibility:public"],
 )
+# TODO: THIS IS USEFUL: TEMPLATING!
+#
+#load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+#load("@rules_cuda//cuda:defs.bzl", "cuda_library")
+#load(":nvbench.bzl", "nvbench_examples")
+#
+#expand_template(
+#    name = "config_cuh",
+#    out = "nvbench_generated/nvbench/config.cuh",
+#    substitutions = {
+#        "#cmakedefine NVBENCH_HAS_NVML": "#define NVBENCH_HAS_NVML 1",
+#        "#cmakedefine NVBENCH_HAS_CUPTI": "#define NVBENCH_HAS_CUPTI 1",
+#    },
+#    template = "nvbench/nvbench/config.cuh.in",
+#)
 
 genrule(
     name = "version",
@@ -59,6 +74,7 @@ cc_library(
     deps = [
         "@com_github_eigen_eigen//:header_lib",
         "@com_github_gabime_spdlog//:spdlog",
+        #        "@com_github_nvidia_thrust//:thrust",
         "@com_github_oneapi_onetbb//:tbb",
         "@com_github_uscilab_cereal//:cereal",
     ],

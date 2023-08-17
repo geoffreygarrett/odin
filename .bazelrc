@@ -16,11 +16,28 @@ build --jobs=20
 
 # Building with optimization and verbose on failures.
 build -c opt # --verbose_failures
-
+build --@rules_cuda//cuda:enable
+build --@rules_cuda//cuda:compiler=nvcc
 
 # Set test output to be streamed directly to the console.
 test --test_output=all
 test --test_summary=detailed
+
+# Disable thrust defines (if necessary)
+# build --@com_github_nvidia_thrust//:enable_thrust_defines=False
+# Change thrust_host_system to TBB
+build --@com_github_nvidia_thrust//:thrust_host_system=TBB
+# Change thrust_device_system to CUDA
+build --@com_github_nvidia_thrust//:thrust_device_system=CUDA
+#build --action_env=gcc=gcc-11
+
+#build --action_env=CUDA_PATH=/home/geoffrey/mambaforge-pypy3/envs/gtoc12/
+build --action_env=CUDA_PATH=/home/geoffrey/mambaforge-pypy3/envs/cudaa
+#build --action_env=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/geoffrey/miniconda3/envs/gpu1/lib
+#build --action_env=CUDA_PATH=/usr/local/cuda
+build --action_env=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/geoffrey/mambaforge-pypy3/envs/cudaa/lib
+run --action_env=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/geoffrey/mambaforge-pypy3/envs/cudaa/lib
+#bazel build --config gcc -c -opt --cuda_archs=sm_61
 
 #--test_output=<summary, errors, all or streamed> default: "summary"
 #Specifies desired output mode. Valid values are 'summary' to output only test status summary,

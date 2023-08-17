@@ -1,0 +1,3 @@
+[submodule "external/polyhedral-gravity-model"]
+	path = external/polyhedral-gravity-model
+	url = git@github.com:geoffreygarrett/polyhedral-gravity-model.git

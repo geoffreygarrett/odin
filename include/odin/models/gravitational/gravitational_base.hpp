@@ -1,125 +1,157 @@
 #ifndef GRAVITATIONAL_BASE_HPP
 #define GRAVITATIONAL_BASE_HPP
 
+#include "gravitational_concept.hpp"
 #include <Eigen/Core>
 #include <odin/parallel/parallel.hpp>
+#include <odin/parallel/parallel_concepts.hpp>
 #include <tbb/tbb.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 
-template<typename T, size_t Dim = 3>
-concept GravitationalConcept = requires(T a, const Eigen::Vector<typename T::Scalar, Dim> &position) {
-    // Ensure that a type T has a type member Scalar
-    typename T::Scalar;
+namespace odin {
 
-    // Ensure that a member function potential() exists with the appropriate signature
-    { a.potential(position) } -> std::convertible_to<typename T::Scalar>;
+    template<typename Derived, typename Scalar, std::size_t Dim = 3>
+    class GravitationalModelBase {
+    public:
+        using vector_type = Eigen::Matrix<Scalar, Dim, 1>;
 
-    // Ensure that a member function acceleration() exists with the appropriate signature
-    { a.acceleration(position) } -> std::convertible_to<Eigen::Vector<typename T::Scalar, Dim>>;
-};
+        Derived &as_derived() {
+            return static_cast<Derived &>(*this);
+        }
 
-// Helper function to ensure gravitational models are compatible with the GravitationalModel concept
-template<typename T, size_t Dim = 3>
-constexpr bool is_gravitational_model_v = GravitationalConcept<T, Dim>;
+        const Derived &as_derived() const {
+            return static_cast<const Derived &>(*this);
+        }
 
+        Derived thread_local_copy() {
+            return as_derived().thread_local_copy_impl();
+        }
 
-template<typename Derived, typename Scalar, int Dim = 3>
-class GravitationalModelBase {
-public:
-    using VectorType = Eigen::Matrix<Scalar, Dim, 1>;
+        Scalar potential(const vector_type &position) const {
+            return as_derived().potential_impl(position);
+        }
 
-    // destructor
-    virtual ~GravitationalModelBase() = default;
+        vector_type acceleration(const vector_type &position) const {
+            return as_derived().acceleration_impl(position);
+        }
 
-    // 3D version
-    Eigen::Tensor<Scalar, 3> calculate_potentials(
-            const Eigen::Tensor<Scalar, 3> &x_grid,
-            const Eigen::Tensor<Scalar, 3> &y_grid,
-            const Eigen::Tensor<Scalar, 3> &z_grid) const {
-        assert(x_grid.dimensions() == y_grid.dimensions() && x_grid.dimensions() == z_grid.dimensions());
+        using series_vector_type = Eigen::Matrix<Scalar, Eigen::Dynamic, Dim>;
+        using series_scalar_type = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
 
-        const auto &dims = x_grid.dimensions();
+        // using series_vector_type = Eigen::Matrix<Scalar, Eigen::Dynamic, Dim>;
+        // using series_scalar_type = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
 
-        Eigen::Tensor<Scalar, 3> potential_grid(dims);
+        // Series version, potential
+        series_scalar_type potential_series(
+                const series_vector_type &positions)
+            requires ThreadSafe<Derived>
+        {
+            spdlog::debug("Calculating potential in series");
+            series_scalar_type potentials(positions.rows());
 
-        // Use lambda function to wrap member function
-        auto fn = [this](Derived &model, const VectorType &v) -> Scalar {
-            return (model.*(&Derived::potential))(v);
-        };
+            SeriesCalculator<
+                    vector_type,       // serial input
+                    Scalar,            // serial output
+                    series_vector_type,// parallel input
+                    series_scalar_type // parallel output
+                    >::calculate(
+                    as_derived(), positions, [](Derived &model, const vector_type &v) -> Scalar {
+                        return model.potential(v);
+                    },
+                    potentials);
 
-        // parallel calculation
-        calculate_in_parallel<Eigen::Tensor<Scalar, 3>>(
-                x_grid, y_grid, z_grid, fn, potential_grid);
+            return potentials;
+        }
 
-        return potential_grid;
-    }
+        // Series version, acceleration
+        series_vector_type acceleration_series(
+                const series_vector_type &positions)
+            requires ThreadSafe<Derived>
+        {
+            spdlog::debug("Calculating acceleration in series");
+            series_vector_type accelerations(positions.rows(), positions.cols());
 
-    // 3D version
-    Eigen::Tensor<Scalar, 4> calculate_accelerations(
-            const Eigen::Tensor<Scalar, 3> &x_grid,
-            const Eigen::Tensor<Scalar, 3> &y_grid,
-            const Eigen::Tensor<Scalar, 3> &z_grid) const {
-        assert(x_grid.dimensions() == y_grid.dimensions() && x_grid.dimensions() == z_grid.dimensions());
+            // Call SeriesCalculator with input_dims and output_dims
+            SeriesCalculator<
+                    vector_type,       // serial input
+                    vector_type,       // serial output
+                    series_vector_type,// parallel input
+                    series_vector_type // parallel output
+                    >::calculate(
+                    as_derived(),
+                    positions,
+                    [](Derived &model, const vector_type &v) -> vector_type {
+                        return model.acceleration(v);
+                    },
+                    accelerations);
 
-        const auto &dims = x_grid.dimensions();
+            return accelerations;
+        }
 
-        Eigen::Tensor<Scalar, 4> acceleration_grid(dims[0], dims[1], dims[2], Dim);
+        using grid_3d_scalar_type = Eigen::Tensor<Scalar, 3>;
+        grid_3d_scalar_type potential_grid(
+                const std::array<grid_3d_scalar_type, 3> &grid_positions)
+            requires ThreadSafe<Derived>
+        {
+            grid_3d_scalar_type potential(
+                    grid_positions[0].dimension(0),
+                    grid_positions[1].dimension(1),
+                    grid_positions[2].dimension(2));
 
-        // Use lambda function to wrap member function
-        auto fn = [this](Derived &model, const VectorType &v) -> Eigen::Matrix<Scalar, Dim, 1> {
-            return (model.*(&Derived::acceleration))(v);
-        };
+            GridCalculator<3, 1>::calculate(
+                    as_derived(),
+                    grid_positions,
+                    [](Derived &model, const vector_type &v) -> Scalar {
+                        return model.potential(v);
+                    },
+                    potential);
 
-        // parallel calculation
-        calculate_in_parallel<Eigen::Tensor<Scalar, 4>>(
-                x_grid, y_grid, z_grid, fn, acceleration_grid);
+            return potential;
+        }
 
-        return acceleration_grid;
-    }
+        using grid_2d_scalar_type = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+        grid_2d_scalar_type potential_grid(
+                const std::array<grid_2d_scalar_type, 3> &grid_positions)
+            requires ThreadSafe<Derived>
+        {
+            grid_2d_scalar_type potential(
+                    grid_positions[0].rows(),
+                    grid_positions[0].cols());
 
-    Derived thread_local_copy() const {
-        return static_cast<const Derived &>(*this).thread_local_copy_impl();
-    }
+            GridCalculator<2, 1>::calculate(
+                    as_derived(),
+                    grid_positions,
+                    [](Derived &model, const vector_type &v) -> Scalar {
+                        return model.potential(v);
+                    },
+                    potential);
 
+            return potential;
+        }
 
-private:
-    template<typename OutputTensorType, typename Callable>
-    void calculate_in_parallel(
-            const Eigen::Tensor<Scalar, 3> &x_grid,
-            const Eigen::Tensor<Scalar, 3> &y_grid,
-            const Eigen::Tensor<Scalar, 3> &z_grid,
-            Callable                      &&calculate_fn,
-            OutputTensorType               &output_grid) const {
-        static_assert(OutputTensorType::NumDimensions == 3 || OutputTensorType::NumDimensions == 4,
-                      "OutputTensorType must be 3D or 4D.");
+        std::array<grid_3d_scalar_type, 3> acceleration_grid(
+                const std::array<grid_3d_scalar_type, 3> &grid_positions)
+            requires ThreadSafe<Derived>
+        {
+            std::array<grid_3d_scalar_type, 3> accelerations;
+            for (auto &a: accelerations) {
+                a = grid_3d_scalar_type(
+                        grid_positions[0].dimension(0),
+                        grid_positions[1].dimension(1),
+                        grid_positions[2].dimension(2));
+            }
 
-        const auto &dims = x_grid.dimensions();
+            GridCalculator<3, 3>::calculate(
+                    as_derived(),
+                    grid_positions,
+                    [](Derived &model, vector_type &v) -> vector_type {
+                        return model.acceleration(v);
+                    },
+                    accelerations);
 
-        tbb::parallel_for(
-                tbb::blocked_range3d<int>(0, dims[0], 0, dims[1], 0, dims[2]),
-                [&](const tbb::blocked_range3d<int> &r) {
-                    thread_local Derived tl_model = static_cast<const Derived &>(*this).thread_local_copy();
+            return accelerations;
+        }
+    };
 
-                    for (int i = r.pages().begin(); i != r.pages().end(); ++i) {
-                        for (int j = r.rows().begin(); j != r.rows().end(); ++j) {
-                            for (int k = r.cols().begin(); k != r.cols().end(); ++k) {
-                                VectorType position(x_grid(i, j, k), y_grid(i, j, k), z_grid(i, j, k));
-
-                                if constexpr (OutputTensorType::NumDimensions == 4) {
-                                    // output tensor for acceleration
-                                    Eigen::Matrix<Scalar, Dim, 1> result = calculate_fn(tl_model, position);
-                                    for (int dim = 0; dim < Dim; ++dim) {
-                                        output_grid(i, j, k, dim) = result[dim];
-                                    }
-                                } else if constexpr (OutputTensorType::NumDimensions == 3) {
-                                    // output tensor for potential
-                                    output_grid(i, j, k) = calculate_fn(tl_model, position);
-                                }
-                            }
-                        }
-                    }
-                });
-    }
-};
-
+}// namespace odin
 #endif// GRAVITATIONAL_BASE_HPP

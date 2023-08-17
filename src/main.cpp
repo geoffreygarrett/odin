@@ -11,6 +11,7 @@
 #include <gsl/gsl_sf_ellint.h>
 
 #include <oneapi/tbb/version.h>
+#include <odin/models/shape/algorithms.h>
 
 using Eigen::MatrixXd;
 
