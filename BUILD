@@ -17,6 +17,11 @@ ALIASES = {
     #    "conda_includes": "@conda_prefix//:include",
 }
 
+exports_files(
+    ["repositories.bzl"],
+    visibility = ["//visibility:public"],
+)
+
 create_aliases(
     ALIASES,
     visibility = ["//visibility:public"],
@@ -79,12 +84,6 @@ cc_library(
         "@com_github_uscilab_cereal//:cereal",
     ],
 )
-
-#cc_binary(
-#    name = "main",
-#    srcs = ["//:src/main.cpp"],
-#    deps = [":odin"],
-#)
 
 # Configuration settings
 create_config_setting(

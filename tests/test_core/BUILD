@@ -10,8 +10,8 @@ cc_test(
     srcs = ["test_rotation_matrix_generator.cpp"],
     deps = [
         ":gtest_main",
-        "//:eigen",
-        "//:odin",
+        "@//odin:eigen",
+        "@//odin:odin",
     ],
 )
 
@@ -20,8 +20,8 @@ cc_test(
     srcs = ["test_history.cpp"],
     deps = [
         ":gtest_main",
-        "//:eigen",
-        "//:odin",
+        "@//odin:eigen",
+        "@//odin:odin",
     ],
 )
 
@@ -30,8 +30,8 @@ cc_test(
     srcs = ["test_tracker.cpp"],
     deps = [
         ":gtest_main",
-        "//:eigen",
-        "//:odin",
+        "@//odin:eigen",
+        "@//odin:odin",
     ],
 )
 
@@ -40,9 +40,9 @@ cc_test(
     srcs = ["test_container_policy.cpp"],
     deps = [
         ":gtest_main",
-        "//:cereal",
-        "//:eigen",
-        "//:odin",
+        "@//odin:cereal",
+        "@//odin:eigen",
+        "@//odin:odin",
     ],
 )
 
@@ -51,9 +51,9 @@ cc_test(
     srcs = ["test_serialization_policy.cpp"],
     deps = [
         ":gtest_main",
-        "//:cereal",
-        "//:eigen",
-        "//:odin",
+        "@//odin:cereal",
+        "@//odin:eigen",
+        "@//odin:odin",
     ],
 )
 
@@ -62,7 +62,7 @@ cc_test(
     srcs = ["test_runge_kutta.cpp"],
     deps = [
         ":gtest_main",
-        "//:odin",
+        "@//odin:odin",
     ],
 )
 
@@ -71,7 +71,7 @@ cc_test(
     srcs = ["test_runge_kutta_embedded.cpp"],
     deps = [
         ":gtest_main",
-        "//:odin",
+        "@//odin:odin",
     ],
 )
 

@@ -10,7 +10,7 @@ cc_test(
     srcs = ["test_autodiff.cpp"],
     deps = [
         ":gtest_main",
-        "//:autodiff",  # their pacakge already contains eigen as a dependency
+        "@//odin:autodiff",  # their package already contains eigen as a dependency
     ],
 )
 
@@ -19,9 +19,9 @@ cc_test(
     srcs = ["test_cereal.cpp"],
     deps = [
         ":gtest_main",
-        "//:cereal",
-        "//:odin",
-        "//:eigen",
+        "@//odin:cereal",
+        "@//odin:odin",
+        "@//odin:eigen",
         # TODO: This should be a test for policy/serialization
     ],
 )
@@ -96,16 +96,16 @@ cc_test(
 #)
 ##        "@odin_conda_environment//:pagmo",
 
-#        "//:cereal",
-#        "//:odin",
-#        "//:eigen",
+#        "@//odin:cereal",
+#        "@//odin:odin",
+#        "@//odin:eigen",
 #        # TODO: This should be a test for policy/serialization
 cc_test(
     name = "tbb",
     srcs = ["test_tbb.cpp"],
     deps = [
         ":gtest_main",
-        "//:tbb",
+        "@//odin:tbb",
     ],
 )
 

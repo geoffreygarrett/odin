@@ -41,10 +41,12 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
     name = "autodiff",
-    deps = ["//autodiff:reverse",
-            "//autodiff:forward"],
+    deps = [
+        "//autodiff:reverse",
+        "//autodiff:forward",
+        "@com_github_eigen_eigen//:eigen_cmake",
+    ],
     visibility = ["//visibility:public"],
     includes = ["."],
     hdrs = glob(["autodiff/**"]),
 )
-

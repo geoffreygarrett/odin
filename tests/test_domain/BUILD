@@ -10,7 +10,7 @@ cc_test(
     srcs = ["test_astrodynamics.cpp"],
     deps = [
         ":gtest_main",
-        "//:odin",
+        "@//odin:odin",
     ],
 )
 

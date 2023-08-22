@@ -18,7 +18,7 @@ cc_test(
     srcs = ["test_autodiff.cpp"],
     deps = [
         ":gtest_main",
-        "//:autodiff",
+        "@//odin:autodiff",
     ],
 )
 
@@ -171,7 +171,7 @@ cc_test(
     srcs = ["test_tree.cpp"],
     deps = [
         ":gtest_main",
-        "@//:odin",
+        "@//odin:odin",
     ],
 )
 
@@ -180,7 +180,7 @@ cc_test(
     srcs = ["test_vectorize.cpp"],
     deps = [
         ":gtest_main",
-        "@//:odin",
+        "@//odin:odin",
     ],
 )
 
@@ -189,7 +189,7 @@ cc_test(
     srcs = ["test_parallel.cpp"],
     deps = [
         ":gtest_main",
-        "@//:odin",
+        "@//odin:odin",
     ],
 )
 
@@ -198,7 +198,7 @@ cc_test(
     srcs = ["test_linalg/test_basics.cpp"],
     deps = [
         ":gtest_main",
-        "@//:odin",
+        "@//odin:odin",
     ],
 )
 
@@ -206,10 +206,10 @@ cc_test(
 test_suite(
     name = "all_tests",
     tests = [
-        "//tests/test_core:all_core",
-        "//tests/test_external:all_external",
-        "//tests/test_models:all_models",
-        "//tests/test_domain:all_domain",
+        "@//odin/tests/test_core:all_core",
+        "@//odin/tests/test_external:all_external",
+        "@//odin/tests/test_models:all_models",
+        "@//odin/tests/test_domain:all_domain",
         #        ":test_autodiff",
         #        ":test_container_policy",
         #        ":test_doppler_shift_measurement",

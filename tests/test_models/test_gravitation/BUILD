@@ -6,8 +6,8 @@ cc_binary(
         "GLOG_CUSTOM_PREFIX_SUPPORT",
     ],
     deps = [
-        "//:gsl",
-        "//:odin",
+        "@//odin:gsl",
+        "@//odin:odin",
         "@com_github_google_glog//:glog",
         "@com_google_googletest//:gtest",
     ],

@@ -10,7 +10,7 @@ alias(
 #    srcs = ["test_tbb.cpp"],
 #    deps = [
 #        ":gtest_main",
-#        "//:tbb",
+#        "@//odin:tbb",
 #    ],
 #)
 

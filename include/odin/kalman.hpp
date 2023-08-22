@@ -1,8 +1,9 @@
 #ifndef KALMAN_HPP
 #define KALMAN_HPP
 
-#include <Eigen/Dense>
 #include <glog/logging.h>
+
+#include <Eigen/Dense>
 #include <iostream>
 #include <odin/utilities/sigma_point_calculator.hpp>
 #include <optional>
@@ -18,43 +19,46 @@ public:
     //    virtual void estimate_parameters(const Eigen::VectorXd &x, const
     //    Eigen::VectorXd &y) = 0;
 
-    [[nodiscard]] Parameter get_parameters() const { return parameters; }
+    [[nodiscard]] Parameter get_parameters() const {
+        return parameters;
+    }
 
 protected:
     Parameter parameters;
 };
 
-template<typename StateType, typename MeasurementType,
-         typename StateCovarianceType, typename MeasurementCovarianceType>
+template<typename StateType,
+        typename MeasurementType,
+        typename StateCovarianceType,
+        typename MeasurementCovarianceType>
 class KalmanFilter : public ParameterEstimator {
 public:
-    static_assert(
-            static_cast<int>(StateType::RowsAtCompileTime) ==
-                            static_cast<int>(StateCovarianceType::RowsAtCompileTime) &&
-                    static_cast<int>(StateType::RowsAtCompileTime) ==
-                            static_cast<int>(StateCovarianceType::ColsAtCompileTime),
+    static_assert(static_cast<int>(StateType::RowsAtCompileTime)
+                                  == static_cast<int>(StateCovarianceType::RowsAtCompileTime)
+                          && static_cast<int>(StateType::RowsAtCompileTime)
+                                     == static_cast<int>(StateCovarianceType::ColsAtCompileTime),
             "StateType dimensions must match with StateCovarianceType");
     static_assert(
-            static_cast<int>(MeasurementType::RowsAtCompileTime) ==
-                            static_cast<int>(MeasurementCovarianceType::RowsAtCompileTime) &&
-                    static_cast<int>(MeasurementType::RowsAtCompileTime) ==
-                            static_cast<int>(MeasurementCovarianceType::ColsAtCompileTime),
+            static_cast<int>(MeasurementType::RowsAtCompileTime)
+                            == static_cast<int>(MeasurementCovarianceType::RowsAtCompileTime)
+                    && static_cast<int>(MeasurementType::RowsAtCompileTime)
+                               == static_cast<int>(MeasurementCovarianceType::ColsAtCompileTime),
             "MeasurementType dimensions must match with MeasurementCovarianceType");
 
     // Various function pointer types used in KalmanFilter
-    using scalar_t = StateType::Scalar;
-    using state_t = StateType;
-    using measurement_t = MeasurementType;
-    using StateFunc = std::function<StateType(const state_t &, scalar_t)>;
-    using MeasurementFunc = std::function<MeasurementType(const state_t &)>;
-    using ProcessCovarianceFunc =
-            std::function<StateCovarianceType(const state_t &, scalar_t)>;
-    using MeasurementCovarianceFunc =
-            std::function<MeasurementCovarianceType(const measurement_t &)>;
+    using scalar_t              = StateType::Scalar;
+    using state_t               = StateType;
+    using measurement_t         = MeasurementType;
+    using StateFunc             = std::function<StateType(const state_t &, scalar_t)>;
+    using MeasurementFunc       = std::function<MeasurementType(const state_t &)>;
+    using ProcessCovarianceFunc = std::function<StateCovarianceType(const state_t &, scalar_t)>;
+    using MeasurementCovarianceFunc
+            = std::function<MeasurementCovarianceType(const measurement_t &)>;
 
-    KalmanFilter(StateFunc state_transition, MeasurementFunc measurement_model,
-                 ProcessCovarianceFunc process_covariance,
-                 MeasurementCovarianceFunc measurement_covariance)
+    KalmanFilter(StateFunc            state_transition,
+            MeasurementFunc           measurement_model,
+            ProcessCovarianceFunc     process_covariance,
+            MeasurementCovarianceFunc measurement_covariance)
         : state_transition_(std::move(state_transition)),
           measurement_model_(std::move(measurement_model)),
           process_covariance_(std::move(process_covariance)),
@@ -68,7 +72,7 @@ public:
     }
 
     virtual void update(const MeasurementType &measurement,
-                        const MeasurementCovarianceType &measurement_noise) {
+            const MeasurementCovarianceType   &measurement_noise) {
         //        MeasurementType y = measurement - measurement_model_(x_);
         //        Eigen::MatrixXd S = H_ * P_ * H_.transpose() +
         //        measurement_covariance_(measurement); Eigen::MatrixXd K = P_ *
@@ -80,74 +84,82 @@ public:
     }
 
 protected:
-    StateType x_;          // state
+    StateType           x_;// state
     StateCovarianceType P_;// covariance
-    Eigen::MatrixXd F_;    // state transition matrix
-    Eigen::MatrixXd H_;    // observation model
+    Eigen::MatrixXd     F_;// state transition matrix
+    Eigen::MatrixXd     H_;// observation model
 
-    StateFunc state_transition_;
-    MeasurementFunc measurement_model_;
-    ProcessCovarianceFunc process_covariance_;
+    StateFunc                 state_transition_;
+    MeasurementFunc           measurement_model_;
+    ProcessCovarianceFunc     process_covariance_;
     MeasurementCovarianceFunc measurement_covariance_;
 
     // private:
 };
 
-template<
-        typename StateType, typename MeasurementType, typename StateCovarianceType,
+template<typename StateType,
+        typename MeasurementType,
+        typename StateCovarianceType,
         typename MeasurementCovarianceType,
-        typename StateTransitionJacobianFunc = Eigen::MatrixXd (*)(
-                const StateType &, const typename KalmanFilter<
-                                           StateType, MeasurementType, StateCovarianceType,
-                                           MeasurementCovarianceType>::StateFunc &),
-        typename MeasurementModelJacobianFunc = Eigen::MatrixXd (*)(
-                const StateType &, const typename KalmanFilter<
-                                           StateType, MeasurementType, StateCovarianceType,
-                                           MeasurementCovarianceType>::MeasurementFunc &)>
-class ExtendedKalmanFilter
-    : public KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                          MeasurementCovarianceType> {
+        typename StateTransitionJacobianFunc  = Eigen::MatrixXd (*)(const StateType &,
+                const typename KalmanFilter<StateType,
+                        MeasurementType,
+                        StateCovarianceType,
+                        MeasurementCovarianceType>::StateFunc &),
+        typename MeasurementModelJacobianFunc = Eigen::MatrixXd (*)(const StateType &,
+                const typename KalmanFilter<StateType,
+                        MeasurementType,
+                        StateCovarianceType,
+                        MeasurementCovarianceType>::MeasurementFunc &)>
+class ExtendedKalmanFilter : public KalmanFilter<StateType,
+                                     MeasurementType,
+                                     StateCovarianceType,
+                                     MeasurementCovarianceType> {
 
-    static_assert(std::is_arithmetic<StateType>::value,
-                  "StateType must be a numeric type");
-    static_assert(std::is_arithmetic<MeasurementType>::value,
-                  "MeasurementType must be a numeric type");
+    static_assert(std::is_arithmetic<StateType>::value, "StateType must be a numeric type");
+    static_assert(
+            std::is_arithmetic<MeasurementType>::value, "MeasurementType must be a numeric type");
 
 public:
-    using typename KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                                MeasurementCovarianceType>::StateFunc;
-    using typename KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                                MeasurementCovarianceType>::MeasurementFunc;
-    using typename KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                                MeasurementCovarianceType>::ProcessCovarianceFunc;
-    using typename KalmanFilter<
-            StateType, MeasurementType, StateCovarianceType,
+    using typename KalmanFilter<StateType,
+            MeasurementType,
+            StateCovarianceType,
+            MeasurementCovarianceType>::StateFunc;
+    using typename KalmanFilter<StateType,
+            MeasurementType,
+            StateCovarianceType,
+            MeasurementCovarianceType>::MeasurementFunc;
+    using typename KalmanFilter<StateType,
+            MeasurementType,
+            StateCovarianceType,
+            MeasurementCovarianceType>::ProcessCovarianceFunc;
+    using typename KalmanFilter<StateType,
+            MeasurementType,
+            StateCovarianceType,
             MeasurementCovarianceType>::MeasurementCovarianceFunc;
 
     using JacobianFunc = std::function<Eigen::MatrixXd(const StateType &)>;
 
     using scalar_t = StateType::Scalar;
 
-    ExtendedKalmanFilter(StateFunc state_transition,
-                         MeasurementFunc measurement_model,
-                         ProcessCovarianceFunc process_covariance,
-                         MeasurementCovarianceFunc measurement_covariance,
-                         StateTransitionJacobianFunc state_transition_jacobian =
-                                 numerical_estimate_jacobian,
-                         MeasurementModelJacobianFunc measurement_model_jacobian =
-                                 numerical_estimate_jacobian)
-        : KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                       MeasurementCovarianceType>(
-                  std::move(state_transition), std::move(measurement_model),
-                  std::move(process_covariance), std::move(measurement_covariance)),
+    ExtendedKalmanFilter(StateFunc       state_transition,
+            MeasurementFunc              measurement_model,
+            ProcessCovarianceFunc        process_covariance,
+            MeasurementCovarianceFunc    measurement_covariance,
+            StateTransitionJacobianFunc  state_transition_jacobian  = numerical_estimate_jacobian,
+            MeasurementModelJacobianFunc measurement_model_jacobian = numerical_estimate_jacobian)
+        : KalmanFilter<StateType, MeasurementType, StateCovarianceType, MeasurementCovarianceType>(
+                std::move(state_transition),
+                std::move(measurement_model),
+                std::move(process_covariance),
+                std::move(measurement_covariance)),
           state_transition_jacobian_(std::move(state_transition_jacobian)),
           measurement_model_jacobian_(std::move(measurement_model_jacobian)) {}
 
     void predict(const scalar_t dt) override {
         this->x_ = this->state_transition_(this->x_, dt);
         this->F_ = state_transition_jacobian_(this->x_, this->state_transition_);
-        this->P_ = this->F_ * this->P_ * this->F_.transpose() +
-                   this->process_covariance_(this->x_);
+        this->P_ = this->F_ * this->P_ * this->F_.transpose() + this->process_covariance_(this->x_);
     }
 
     //    template<int MeasurementSize>
@@ -158,22 +170,21 @@ public:
 
     void update(const MeasurementType &z) override {
         MeasurementType y = z - this->measurement_model_(this->x_);
-        this->H_ = measurement_model_jacobian_(this->x_, this->measurement_model_);
-        Eigen::MatrixXd S = this->H_ * this->P_ * this->H_.transpose() +
-                            this->measurement_covariance_(z);
+        this->H_          = measurement_model_jacobian_(this->x_, this->measurement_model_);
+        Eigen::MatrixXd S
+                = this->H_ * this->P_ * this->H_.transpose() + this->measurement_covariance_(z);
         Eigen::MatrixXd K = this->P_ * this->H_.transpose() * S.inverse();
 
         this->x_ = this->x_ + K * y;
-        this->P_ = (Eigen::MatrixXd::Identity(this->P_.rows(), this->P_.cols()) -
-                    K * this->H_) *
-                   this->P_;
+        this->P_ = (Eigen::MatrixXd::Identity(this->P_.rows(), this->P_.cols()) - K * this->H_)
+                 * this->P_;
     }
 
-    static Eigen::MatrixXd
-    numerical_estimate_jacobian(const StateType &x, const StateFunc &state_func) {
+    static Eigen::MatrixXd numerical_estimate_jacobian(
+            const StateType &x, const StateFunc &state_func) {
         using state_t = typename StateType::Scalar;
-        Eigen::MatrixXd jacobian(x.size(), x.size());
-        StateType x_plus_dx, x_minus_dx;
+        Eigen::MatrixXd   jacobian(x.size(), x.size());
+        StateType         x_plus_dx, x_minus_dx;
         constexpr state_t dx = 1e-6;
 
         for (int i = 0; i < x.size(); ++i) {
@@ -181,8 +192,8 @@ public:
             x_plus_dx(i) += dx;
             x_minus_dx(i) -= dx;
 
-            Eigen::VectorXd derivative =
-                    (state_func(x_plus_dx) - state_func(x_minus_dx)) / (2.0 * dx);
+            Eigen::VectorXd derivative
+                    = (state_func(x_plus_dx) - state_func(x_minus_dx)) / (2.0 * dx);
             jacobian.col(i) = derivative;
         }
 
@@ -195,15 +206,14 @@ private:
 
     Eigen::MatrixXd calculate_jacobian_h(const StateType &x);
 
-    StateTransitionJacobianFunc state_transition_jacobian_;
+    StateTransitionJacobianFunc  state_transition_jacobian_;
     MeasurementModelJacobianFunc measurement_model_jacobian_;
 };
 
 struct InversionPolicy {
     template<typename MatrixType>
     static MatrixType invert(const MatrixType &matrix) {
-        static_assert(always_false<MatrixType>::value,
-                      "InversionPolicy::invert() not implemented");
+        static_assert(always_false<MatrixType>::value, "InversionPolicy::invert() not implemented");
         return matrix;// this will never be executed
     }
 
@@ -251,12 +261,9 @@ struct DirectInversePolicy : public InversionPolicy {
  */
 template<typename Derived>
 bool check_numerical_issues(const Eigen::MatrixBase<Derived> &mat) {
-    if (mat.hasNaN() ||
-        (mat.array() == std::numeric_limits<typename Derived::Scalar>::infinity())
-                .any() ||
-        (mat.array() ==
-         -std::numeric_limits<typename Derived::Scalar>::infinity())
-                .any()) {
+    if (mat.hasNaN()
+            || (mat.array() == std::numeric_limits<typename Derived::Scalar>::infinity()).any()
+            || (mat.array() == -std::numeric_limits<typename Derived::Scalar>::infinity()).any()) {
         return true;
     }
     return false;
@@ -277,16 +284,15 @@ bool check_numerical_issues(const Eigen::MatrixBase<Derived> &mat) {
 
 template<typename MatrixType>
 struct ConditioningResult {
-    using scalar_t = typename MatrixType::Scalar;
-    using complex_scalar_t = std::complex<scalar_t>;
+    using scalar_t            = typename MatrixType::Scalar;
+    using complex_scalar_t    = std::complex<scalar_t>;
     static constexpr int Rows = MatrixType::RowsAtCompileTime;
     static constexpr int Cols = MatrixType::ColsAtCompileTime;
-    static constexpr int Dimension =
-            (Rows != Eigen::Dynamic && Cols != Eigen::Dynamic) ? Rows
-                                                               : Eigen::Dynamic;
-    bool is_well_conditioned;
-    scalar_t condition_number;
-    std::optional<scalar_t> determinant;
+    static constexpr int Dimension
+            = (Rows != Eigen::Dynamic && Cols != Eigen::Dynamic) ? Rows : Eigen::Dynamic;
+    bool                                                         is_well_conditioned;
+    scalar_t                                                     condition_number;
+    std::optional<scalar_t>                                      determinant;
     std::optional<Eigen::Matrix<complex_scalar_t, Dimension, 1>> eigenvalues;
 };
 
@@ -297,35 +303,34 @@ bool is_symmetric(const Eigen::MatrixBase<Derived> &matrix) {
 
 // #include <glog/logging.h>
 
-template<typename MatrixType, bool ThrowOnError = false, bool Verbose = true,
-         bool ReturnFullResult = true>
-ConditioningResult<MatrixType>
-check_conditioning(const MatrixType &matrix,
-                   typename MatrixType::Scalar condition_threshold = 1.0e14,
-                   const std::string &matrix_name = "") {
+template<typename MatrixType,
+        bool ThrowOnError     = false,
+        bool Verbose          = true,
+        bool ReturnFullResult = true>
+ConditioningResult<MatrixType> check_conditioning(const MatrixType &matrix,
+        typename MatrixType::Scalar                                 condition_threshold = 1.0e14,
+        const std::string                                          &matrix_name         = "") {
     Eigen::JacobiSVD<MatrixType> svd(matrix);
-    using scalar_t = typename MatrixType::Scalar;
-    scalar_t smallest_singular_value =
-            svd.singularValues()(svd.singularValues().size() - 1);
-    scalar_t largest_singular_value = svd.singularValues()(0);
-    scalar_t cond = largest_singular_value / smallest_singular_value;
+    using scalar_t                   = typename MatrixType::Scalar;
+    scalar_t smallest_singular_value = svd.singularValues()(svd.singularValues().size() - 1);
+    scalar_t largest_singular_value  = svd.singularValues()(0);
+    scalar_t cond                    = largest_singular_value / smallest_singular_value;
 
     ConditioningResult<MatrixType> result;
-    result.condition_number = cond;
+    result.condition_number    = cond;
     result.is_well_conditioned = cond <= condition_threshold;
 
-    if constexpr (MatrixType::RowsAtCompileTime != Eigen::Dynamic &&
-                  MatrixType::ColsAtCompileTime != Eigen::Dynamic &&
-                  MatrixType::RowsAtCompileTime ==
-                          MatrixType::ColsAtCompileTime) {
+    if constexpr (MatrixType::RowsAtCompileTime != Eigen::Dynamic
+                  && MatrixType::ColsAtCompileTime != Eigen::Dynamic
+                  && MatrixType::RowsAtCompileTime == MatrixType::ColsAtCompileTime) {
         if (matrix.isApprox(matrix.transpose(),
-                            1e-10)) {// Check if the matrix is symmetric
+                    1e-10)) {// Check if the matrix is symmetric
             result.determinant = matrix.determinant();
             result.eigenvalues = matrix.eigenvalues();
         }
     } else if (matrix.rows() == matrix.cols()) {
         if (matrix.isApprox(matrix.transpose(),
-                            1e-10)) {// Check if the matrix is symmetric
+                    1e-10)) {// Check if the matrix is symmetric
             result.determinant = matrix.determinant();
             result.eigenvalues = matrix.eigenvalues();
         }
@@ -333,11 +338,9 @@ check_conditioning(const MatrixType &matrix,
 
     if (!result.is_well_conditioned) {
         std::stringstream error_message;
-        error_message << "Matrix is ill-conditioned. Condition number is: " << cond
-                      << std::endl;
-        error_message << "Smallest and largest singular values are: "
-                      << smallest_singular_value << ", " << largest_singular_value
-                      << ". ";
+        error_message << "Matrix is ill-conditioned. Condition number is: " << cond << std::endl;
+        error_message << "Smallest and largest singular values are: " << smallest_singular_value
+                      << ", " << largest_singular_value << ". ";
         if (result.determinant.has_value()) {
             error_message << "Determinant is: " << *result.determinant << ". ";
             if (result.eigenvalues.has_value()) {
@@ -346,7 +349,7 @@ check_conditioning(const MatrixType &matrix,
                     eigenvalues_ss << eigenvalue << ", ";
                 }
                 std::string eigenvalues_str = eigenvalues_ss.str();
-                eigenvalues_str = eigenvalues_str.substr(
+                eigenvalues_str             = eigenvalues_str.substr(
                         0, eigenvalues_str.length() - 2);// get rid of the last comma
                 error_message << "Eigenvalues are: " << eigenvalues_str << ". ";
             } else {
@@ -355,8 +358,8 @@ check_conditioning(const MatrixType &matrix,
         }
         if (!matrix_name.empty()) {
             std::stringstream final_error_message;
-            final_error_message << "Error occurred with matrix '" << matrix_name
-                                << "'. " << error_message.str();
+            final_error_message << "Error occurred with matrix '" << matrix_name << "'. "
+                                << error_message.str();
             error_message.swap(final_error_message);
         }
 
@@ -454,8 +457,8 @@ check_conditioning(const MatrixType &matrix,
 
 template<typename MatrixType, typename Scalar = typename MatrixType::Scalar>
 bool is_well_conditioned(const MatrixType &matrix,
-                         Scalar condition_threshold = 1.0e12,
-                         const std::string &matrix_name = "") {
+        Scalar                             condition_threshold = 1.0e12,
+        const std::string                 &matrix_name         = "") {
     auto result = check_conditioning<MatrixType, false, false, false>(
             matrix, condition_threshold, matrix_name);
     return result.is_well_conditioned;
@@ -527,22 +530,24 @@ bool is_well_conditioned(const MatrixType &matrix,
  */
 #include <odin/eigen/inversion_policy.hpp>
 
-template<typename StateType, typename MeasurementType,
-         typename StateCovarianceType, typename MeasurementCovarianceType,
-         typename InversionPolicy = policy::pinv>
-class UnscentedKalmanFilter
-    : public KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                          MeasurementCovarianceType> {
+template<typename StateType,
+        typename MeasurementType,
+        typename StateCovarianceType,
+        typename MeasurementCovarianceType,
+        typename InversionPolicy = policy::pinv>
+class UnscentedKalmanFilter : public KalmanFilter<StateType,
+                                      MeasurementType,
+                                      StateCovarianceType,
+                                      MeasurementCovarianceType> {
 public:
-    using scalar_t = typename StateType::Scalar;
-    using state_t = StateType;
-    const static int state_dim = state_t::RowsAtCompileTime;
-    using measurement_t = MeasurementType;
-    using state_covariance_t = StateCovarianceType;
+    using scalar_t                 = typename StateType::Scalar;
+    using state_t                  = StateType;
+    const static int state_dim     = state_t::RowsAtCompileTime;
+    using measurement_t            = MeasurementType;
+    using state_covariance_t       = StateCovarianceType;
     using measurement_covariance_t = MeasurementCovarianceType;
 
-    static constexpr int SigmaPointSizeValue =
-            SigmaPointSize<state_t::RowsAtCompileTime>::value;
+    static constexpr int SigmaPointSizeValue = SigmaPointSize<state_t::RowsAtCompileTime>::value;
 
     // Define a method selection variable
     //    static constexpr int inversionMethod = 0; // 0 for normal inverse, 1 for
@@ -550,28 +555,34 @@ public:
 
     // Perform static dimension checks at compile time for static matrices.
     // Compile-time checks to ensure matrix/vector dimensions are compatible.
-    static_assert(
-            static_cast<int>(StateType::RowsAtCompileTime) ==
-                            static_cast<int>(StateCovarianceType::RowsAtCompileTime) &&
-                    static_cast<int>(StateType::RowsAtCompileTime) ==
-                            static_cast<int>(StateCovarianceType::ColsAtCompileTime),
+    static_assert(static_cast<int>(StateType::RowsAtCompileTime)
+                                  == static_cast<int>(StateCovarianceType::RowsAtCompileTime)
+                          && static_cast<int>(StateType::RowsAtCompileTime)
+                                     == static_cast<int>(StateCovarianceType::ColsAtCompileTime),
             "StateType dimensions must match with StateCovarianceType");
     static_assert(
-            static_cast<int>(MeasurementType::RowsAtCompileTime) ==
-                            static_cast<int>(MeasurementCovarianceType::RowsAtCompileTime) &&
-                    static_cast<int>(MeasurementType::RowsAtCompileTime) ==
-                            static_cast<int>(MeasurementCovarianceType::ColsAtCompileTime),
+            static_cast<int>(MeasurementType::RowsAtCompileTime)
+                            == static_cast<int>(MeasurementCovarianceType::RowsAtCompileTime)
+                    && static_cast<int>(MeasurementType::RowsAtCompileTime)
+                               == static_cast<int>(MeasurementCovarianceType::ColsAtCompileTime),
             "MeasurementType dimensions must match with MeasurementCovarianceType");
 
     // Various function pointer types used in UKF
-    using typename KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                                MeasurementCovarianceType>::StateFunc;
-    using typename KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                                MeasurementCovarianceType>::MeasurementFunc;
-    using typename KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                                MeasurementCovarianceType>::ProcessCovarianceFunc;
-    using typename KalmanFilter<
-            StateType, MeasurementType, StateCovarianceType,
+    using typename KalmanFilter<StateType,
+            MeasurementType,
+            StateCovarianceType,
+            MeasurementCovarianceType>::StateFunc;
+    using typename KalmanFilter<StateType,
+            MeasurementType,
+            StateCovarianceType,
+            MeasurementCovarianceType>::MeasurementFunc;
+    using typename KalmanFilter<StateType,
+            MeasurementType,
+            StateCovarianceType,
+            MeasurementCovarianceType>::ProcessCovarianceFunc;
+    using typename KalmanFilter<StateType,
+            MeasurementType,
+            StateCovarianceType,
             MeasurementCovarianceType>::MeasurementCovarianceFunc;
 
     /**
@@ -591,16 +602,18 @@ public:
    * of the sigma points. Default is 0.0.
    *
    */
-    UnscentedKalmanFilter(StateFunc state_transition,
-                          MeasurementFunc measurement_model,
-                          ProcessCovarianceFunc process_covariance,
-                          MeasurementCovarianceFunc measurement_covariance,
-                          scalar_t alpha = 1.0, scalar_t beta = 2.0,
-                          scalar_t kappa = 0.0)
-        : KalmanFilter<StateType, MeasurementType, StateCovarianceType,
-                       MeasurementCovarianceType>(
-                  std::move(state_transition), std::move(measurement_model),
-                  std::move(process_covariance), std::move(measurement_covariance)),
+    UnscentedKalmanFilter(StateFunc   state_transition,
+            MeasurementFunc           measurement_model,
+            ProcessCovarianceFunc     process_covariance,
+            MeasurementCovarianceFunc measurement_covariance,
+            scalar_t                  alpha = 1.0,
+            scalar_t                  beta  = 2.0,
+            scalar_t                  kappa = 0.0)
+        : KalmanFilter<StateType, MeasurementType, StateCovarianceType, MeasurementCovarianceType>(
+                std::move(state_transition),
+                std::move(measurement_model),
+                std::move(process_covariance),
+                std::move(measurement_covariance)),
           sigma_point_calculator_(alpha, beta, kappa) {}
 
     /**
@@ -617,9 +630,13 @@ public:
         state_ = initial_state;
     }
 
-    state_t &get_state() { return state_; }
+    state_t &get_state() {
+        return state_;
+    }
 
-    state_covariance_t &get_state_covariance() { return state_covariance_; }
+    state_covariance_t &get_state_covariance() {
+        return state_covariance_;
+    }
 
     void set_initial_covariance(const StateCovarianceType &initial_covariance) {
         state_covariance_ = initial_covariance;
@@ -664,26 +681,26 @@ public:
         // estimate (dimension Lx1).
         state_.setZero();
         for (int i = 0; i < sigma_points.cols(); ++i) {
-            state_ +=
-                    sigma_point_calculator_.get_weights_mean()(i) * sigma_points.col(i);
+            state_ += sigma_point_calculator_.get_weights_mean()(i) * sigma_points.col(i);
         }
 
         // Compute the a priori estimate of the state covariance (dimension LxL).
         state_covariance_.setZero();
         for (int i = 0; i < sigma_points.cols(); ++i) {
             StateType diff = sigma_points.col(i) - state_;
-            state_covariance_ += sigma_point_calculator_.get_weights_covariance()(i) *
-                                 diff * diff.transpose();
+            state_covariance_ += sigma_point_calculator_.get_weights_covariance()(i) * diff
+                               * diff.transpose();
         }
 
         // Calculate process covariance once (dimension LxL)
-        StateCovarianceType process_covariance =
-                this->process_covariance_(state_, dt);// add dt here
+        StateCovarianceType process_covariance
+                = this->process_covariance_(state_, dt);// add dt here
 
         // Validate the dimensions of the state_covariance_ and process_covariance
         // for compatibility
-        check_dimensions(
-                state_covariance_, process_covariance, MatrixOperation::ADD,
+        check_dimensions(state_covariance_,
+                process_covariance,
+                MatrixOperation::ADD,
                 "Inconsistent dimensions of state covariance and process covariance.");
 
         // Add the process noise covariance to the a priori state covariance
@@ -707,52 +724,50 @@ public:
    * @param measurement_noise - The measurement noise covariance (dimension MxM)
    */
     template<int MeasurementSize>
-    void update(const Eigen::Vector<scalar_t, MeasurementSize> &measurement,
-                const Eigen::Matrix<scalar_t, MeasurementSize, MeasurementSize>
-                        &measurement_noise) {
+    void update(const Eigen::Vector<scalar_t, MeasurementSize>              &measurement,
+            const Eigen::Matrix<scalar_t, MeasurementSize, MeasurementSize> &measurement_noise) {
 
         // Ensure that the number of sigma points is as expected
         auto sigma_points = sigma_point_calculator_.get_sigma_points();
-        assert(sigma_points.cols() == 2 * state_.size() + 1 &&
-               "Inconsistent number of sigma points");
+        assert(sigma_points.cols() == 2 * state_.size() + 1
+                && "Inconsistent number of sigma points");
 
         /*
-     *  Transform the sigma points through the measurement function h (dimension
-     * Mx(2L+1)). Here, compile-time conditions (constexpr) are employed to
-     * optimize the initialization or resizing of the matrix Z, depending on
-     *  whether MeasurementSize and SigmaPointSizeValue are known at compile
-     * time or are dynamic.
-     */
+         *  Transform the sigma points through the measurement function h (dimension
+         * Mx(2L+1)). Here, compile-time conditions (constexpr) are employed to
+         * optimize the initialization or resizing of the matrix Z, depending on
+         *  whether MeasurementSize and SigmaPointSizeValue are known at compile
+         * time or are dynamic.
+         */
         Eigen::Matrix<scalar_t, MeasurementSize, SigmaPointSizeValue> Z;
-        if constexpr (MeasurementSize == Eigen::Dynamic &&
-                      SigmaPointSizeValue == Eigen::Dynamic) {
+        if constexpr (MeasurementSize == Eigen::Dynamic && SigmaPointSizeValue == Eigen::Dynamic) {
             /*
-       *  Both MeasurementSize and SigmaPointSizeValue are dynamic, implying
-       * that their values are not known at compile time. Therefore, the matrix
-       * Z's dimensions are determined based on the runtime dimensions of the
-       *  input measurement and sigma points.
-       */
+             *  Both MeasurementSize and SigmaPointSizeValue are dynamic, implying
+             * that their values are not known at compile time. Therefore, the matrix
+             * Z's dimensions are determined based on the runtime dimensions of the
+             *  input measurement and sigma points.
+             */
             Z.resize(measurement.rows(), sigma_points.cols());
         } else if constexpr (MeasurementSize == Eigen::Dynamic) {
             /*
-       *  Only MeasurementSize is dynamic. Hence, Z's row count is set based on
-       * the measurement's runtime row count. The column count is set to
-       * SigmaPointSizeValue, which is known at compile time.
-       */
+             *  Only MeasurementSize is dynamic. Hence, Z's row count is set based on
+             * the measurement's runtime row count. The column count is set to
+             * SigmaPointSizeValue, which is known at compile time.
+             */
             Z.resize(measurement.rows(), SigmaPointSizeValue);
         } else if constexpr (SigmaPointSizeValue == Eigen::Dynamic) {
             /*
-       *  Only SigmaPointSizeValue is dynamic. Therefore, the number of Z's
-       * columns is set based on the sigma points' runtime column count. The row
-       * count is set to MeasurementSize, known at compile time.
-       */
+             *  Only SigmaPointSizeValue is dynamic. Therefore, the number of Z's
+             * columns is set based on the sigma points' runtime column count. The row
+             * count is set to MeasurementSize, known at compile time.
+             */
             Z.resize(MeasurementSize, sigma_points.cols());
         } else {
             /*
-       *  Both MeasurementSize and SigmaPointSizeValue are known at compile
-       * time. Therefore, we do not need to resize Z at runtime, as its size is
-       * fixed.
-       */
+             *  Both MeasurementSize and SigmaPointSizeValue are known at compile
+             * time. Therefore, we do not need to resize Z at runtime, as its size is
+             * fixed.
+             */
         }
         /*
      *  TECHNICAL NOTE:
@@ -778,8 +793,8 @@ public:
             if constexpr (MeasurementSize == Eigen::Dynamic) {
                 Z.col(i) = this->measurement_model_(sigma_points.col(i));
             } else {
-                Z.template block<MeasurementSize, 1>(0, i) =
-                        this->measurement_model_(sigma_points.col(i));
+                Z.template block<MeasurementSize, 1>(0, i)
+                        = this->measurement_model_(sigma_points.col(i));
                 //                LOG(INFO) << "Z:
                 //                --------------------------------------"; LOG(INFO) <<
                 //                "\n" << Z; LOG(INFO) << "Sig:
@@ -795,23 +810,21 @@ public:
         //        "\n\033[0;34m████████████████████████████████████████████████████████\033[0m";
 
         // (1) Predicted measurement: z = Sum(W_j * Z_j) for all j
-        Eigen::Matrix<scalar_t, MeasurementSize, 1> z_pred =
-                Z * sigma_point_calculator_.get_weights_mean().asDiagonal() *
-                Eigen::Matrix<scalar_t, SigmaPointSizeValue, 1>::Ones();
+        Eigen::Matrix<scalar_t, MeasurementSize, 1> z_pred
+                = Z * sigma_point_calculator_.get_weights_mean().asDiagonal()
+                * Eigen::Matrix<scalar_t, SigmaPointSizeValue, 1>::Ones();
 
         // (2) Predicted measurement covariance: S = Sum(W_j * (Z_j - z) * (Z_j -
         // z)^T) + R for all j
-        Eigen::Array<scalar_t, MeasurementSize, SigmaPointSizeValue> diff_Z =
-                Z.array().colwise() - z_pred.array();
-        Eigen::Array<scalar_t, SigmaPointSizeValue, 1> weights =
-                sigma_point_calculator_.get_weights_covariance().array();
-        Eigen::Array<scalar_t, MeasurementSize, SigmaPointSizeValue>
-                diff_Z_weighted =
-                        (weights.transpose().replicate(MeasurementSize, 1) * diff_Z)
-                                .matrix();
-        Eigen::Matrix<scalar_t, MeasurementSize, MeasurementSize> S =
-                (diff_Z_weighted.matrix() * diff_Z_weighted.matrix().transpose()) +
-                measurement_noise;
+        Eigen::Array<scalar_t, MeasurementSize, SigmaPointSizeValue> diff_Z
+                = Z.array().colwise() - z_pred.array();
+        Eigen::Array<scalar_t, SigmaPointSizeValue, 1> weights
+                = sigma_point_calculator_.get_weights_covariance().array();
+        Eigen::Array<scalar_t, MeasurementSize, SigmaPointSizeValue> diff_Z_weighted
+                = (weights.transpose().replicate(MeasurementSize, 1) * diff_Z).matrix();
+        Eigen::Matrix<scalar_t, MeasurementSize, MeasurementSize> S
+                = (diff_Z_weighted.matrix() * diff_Z_weighted.matrix().transpose())
+                + measurement_noise;
 
         // Check if S is well-conditioned and has no numerical issues
         //        if (!is_well_conditioned(S) || check_numerical_issues(S)) {
@@ -825,12 +838,11 @@ public:
         // Cross covariance matrix: C_xz = Sum(W_j * (X_j - x) * (Z_j - z)^T) for
         // all j
 
-        Eigen::Array<scalar_t, state_dim, SigmaPointSizeValue> diff_X =
-                sigma_points.array().colwise() - state_.array();
-        Eigen::Matrix<scalar_t, Eigen::Dynamic, MeasurementSize> cross_covariance =
-                diff_X.matrix() *
-                sigma_point_calculator_.get_weights_covariance().asDiagonal() *
-                diff_Z.matrix().transpose();
+        Eigen::Array<scalar_t, state_dim, SigmaPointSizeValue> diff_X
+                = sigma_points.array().colwise() - state_.array();
+        Eigen::Matrix<scalar_t, Eigen::Dynamic, MeasurementSize> cross_covariance
+                = diff_X.matrix() * sigma_point_calculator_.get_weights_covariance().asDiagonal()
+                * diff_Z.matrix().transpose();
 
         //        if (!is_well_conditioned(cross_covariance)) {
         //            LOG(ERROR) << "Cross covariance is ill-conditioned";
@@ -844,8 +856,8 @@ public:
         //        }
 
         // Kalman gain: K = C_xz * S^-1
-        Eigen::Matrix<scalar_t, Eigen::Dynamic, MeasurementSize> K =
-                cross_covariance * InversionPolicy::invert(S);
+        Eigen::Matrix<scalar_t, Eigen::Dynamic, MeasurementSize> K
+                = cross_covariance * InversionPolicy::invert(S);
 
         // Check Kalman gain for numerical issues
         //        if (check_numerical_issues(K)) {
@@ -904,7 +916,7 @@ public:
     }
 
 private:
-    state_t state_;                      // state
+    state_t            state_;           // state
     state_covariance_t state_covariance_;// covariance of the state
     UKFSigmaPointCalculator<StateType::RowsAtCompileTime, scalar_t>
             sigma_point_calculator_;// sigma point calculator
