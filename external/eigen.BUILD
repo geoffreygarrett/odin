@@ -59,5 +59,15 @@ cc_library(
     # We don't need to include the sources here, because this library
     # is a header-only library. CMake is just used for testing etc.
     visibility = ["//visibility:public"],
-    includes = ["."],
+    linkopts = select({
+        "//conditions:default": [""],
+        "@platforms//os:macos": ["-lomp"],
+    }),
+    copts = select({
+        "//conditions:default": [""],
+        "@platforms//os:macos": ["-fopenmp"],
+    }),
+    includes = select({
+        "//conditions:default": ["."],
+    }),
 )

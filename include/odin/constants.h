@@ -6,7 +6,7 @@
 namespace odin::consts {
 
 template<typename Scalar = double>
-inline constexpr Scalar PI = static_cast<Scalar>(M_PIl);
+inline constexpr Scalar PI = static_cast<Scalar>(3.141592653589793115997963468544185161590576171875);
 
 template<typename Scalar = double>
 inline constexpr Scalar PI_2 = PI<Scalar> / 2.0;

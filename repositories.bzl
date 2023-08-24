@@ -118,13 +118,20 @@ def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True, thr
         strip_prefix = "fmt-9.1.0",
     )
 
+    #    maybe(
+    #        http_archive,
+    #        name = "rules_foreign_cc",
+    #        sha256 = "2a4d07cd64b0719b39a7c12218a3e507672b82a97b98c6a89d38565894cf7c51",
+    #        strip_prefix = "rules_foreign_cc-0.9.0",
+    #        urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/0.9.0.tar.gz"],
+    #    )
     maybe(
-        http_archive,
+        git_repository,
         name = "rules_foreign_cc",
-        sha256 = "2a4d07cd64b0719b39a7c12218a3e507672b82a97b98c6a89d38565894cf7c51",
-        strip_prefix = "rules_foreign_cc-0.9.0",
-        urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/0.9.0.tar.gz"],
+        remote = "https://github.com/bazelbuild/rules_foreign_cc",
+        commit = "816905a078773405803e86635def78b61d2f782d",
     )
+    #    816905a078773405803e86635def78b61d2f782d
 
     maybe(
         http_archive,

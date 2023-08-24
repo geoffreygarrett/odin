@@ -21,7 +21,7 @@ T mod(T a, T b) {
     return std::fmod((std::fmod(a, b) + b), b);
 }
 
-namespace odin::domain::astrodynamics {
+namespace odin::domain::astro {
 
 template<typename Scalar>
 Scalar anomaly_eccentric_to_mean(Scalar E, Scalar e) {

@@ -205,7 +205,7 @@ public:
         return raw_copy;
     }
 
-    void add_child_impl(base_type::p_child child) {
+    void add_child_impl(typename base_type::p_child child) {
         child->m_parent = this;
         this->m_children.emplace_back(std::move(child));
     }
@@ -220,7 +220,7 @@ public:
 
     [[nodiscard]] bool has_parent_impl() const { return this->m_parent != nullptr; }
 
-    void set_parent_impl(base_type::p_parent parent) { this->m_parent = parent; }
+    void set_parent_impl(typename base_type::p_parent parent) { this->m_parent = parent; }
 
     typename base_type::p_child remove_child_impl(RawNode<T> *child) {
         auto it = std::find_if(
@@ -276,7 +276,7 @@ public:
         return raw_node;
     }
 
-    void add_child_impl(base_type::p_child child) {
+    void add_child_impl(typename base_type::p_child child) {
         child->m_parent = this->weak_from_this();
         this->m_children.push_back(child);
     }
@@ -291,7 +291,7 @@ public:
 
     [[nodiscard]] bool has_parent_impl() const { return !this->m_parent.expired(); }
 
-    void set_parent_impl(base_type::p_parent parent) { this->m_parent = parent; }
+    void set_parent_impl(typename base_type::p_parent parent) { this->m_parent = parent; }
 
     typename base_type::p_child remove_child_impl(SafeNode<T> *child) {
         auto it = std::find_if(

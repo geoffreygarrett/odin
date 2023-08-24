@@ -23,18 +23,9 @@ configure_make(
     lib_source = "//:gsl_sources",
     configure_options = select({
         "@platforms//os:windows": ["--disable-static"],
+        "@platforms//os:macos": ["--program-prefix=g", "--disable-static"],
         "//conditions:default": [],
     }),
-    #        env = select({
-    #            "@platforms//os:windows": {
-    #                "CPPFLAGS": "-DGSL_DLL -DWIN32",
-    #                "CXXFLAGS": "-DGSL_DLL -DWIN32",
-    #                "CFLAGS": "-DGSL_DLL -DWIN32",
-    #                "LDFLAGS": "-lcblas",
-    #            },
-    #        "//conditions:default": {
-    #            "LIBS": "-lcblas -lm",
-    #        },
     #    }),
     copts = select({
         "@platforms//os:windows": ["-DGSL_DLL", "-DWIN32"],
@@ -60,6 +51,12 @@ configure_make(
         "//conditions:default": [],
     }),
     visibility = ["//visibility:public"],
+    env = select({
+        "@platforms//os:macos": {
+            "AR": "$$(command -v glibtool)",  # brew install libtool
+        },
+        "//conditions:default": {},
+    }),
 )
 
 filegroup(
@@ -67,3 +64,16 @@ filegroup(
     srcs = glob(["**"]),
     visibility = ["//visibility:public"],
 )
+
+#filegroup(
+#    name = "gsl_brew_headers",
+#    srcs = glob(["/opt/homebrew/include/gsl/**"]),
+#)
+#
+#cc_import(
+#    name = "gsl",
+#    shared_library = ":gsl",
+#    static_library = ":gsl",
+#    include =
+#    visibility = ["//visibility:public"],
+#)

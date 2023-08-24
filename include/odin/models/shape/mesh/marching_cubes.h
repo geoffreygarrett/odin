@@ -12,7 +12,7 @@
 #include "face_vertex.h"
 #include "face_vertex_impl.h"
 
-w
+
 namespace odin {
 
 // TODO: Refactor odin::shape namespace for point.h

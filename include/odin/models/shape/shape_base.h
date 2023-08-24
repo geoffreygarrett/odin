@@ -19,7 +19,7 @@ public:
     using derived_type      = T;
     using scalar_type       = U;
     using point_type        = P;// User-provided point container
-    using point_series_type = point_series_type_trait<point_type>::type;
+    using point_series_type = typename point_series_type_trait<point_type>::type;
     //    using point_grid_type   = point_grid_type_trait<point_type>::type;
 
     // constructor
