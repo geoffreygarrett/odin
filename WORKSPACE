@@ -3,6 +3,37 @@
 # ---------------------------------------------------------
 workspace(name = "odin")
 
+# ---------------------------------------------------------
+# Homebrew
+# ---------------------------------------------------------
+load("@bazel_skylib//lib:paths.bzl", "paths")
+
+def gsl_dependency():
+    # Check if GSL exists at the Homebrew path
+    if paths.exists("/opt/homebrew/opt/gsl"):
+        native.new_local_repository(
+            name = "org_gnu_gsl",
+            build_file_content = """
+cc_library(
+    name = "gsl",
+    hdrs = glob(["include/**/*.h"]),
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+""",
+            path = "/opt/homebrew/opt/gsl",
+        )
+    else:
+        native.http_archive(
+            name = "org_gnu_gsl",
+            build_file = "@//odin:external/gsl.BUILD",
+            sha256 = "dcb0fbd43048832b757ff9942691a8dd70026d5da0ff85601e52687f6deeb34b",
+            strip_prefix = "gsl-2.7.1",
+            urls = ["https://ftp.gnu.org/gnu/gsl/gsl-2.7.1.tar.gz"],
+        )
+
+gsl_dependency()
+
 #local_repository(
 #    name = "pybind11_bazel",
 #    path = "external/pybind11_bazel",

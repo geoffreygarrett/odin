@@ -2,13 +2,40 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load("//:bazel/tools/build_rules.bzl", "create_aliases", "create_config_setting")
 
+# BUILD
+config_setting(
+    name = "local_brew_gnu_gsl",
+    values = {
+        "define": "use_local_homebrew_gsl=true",
+    },
+)
+
+#def gsl_dependency():  # somehow need to check, and raise error for user to make it more explicit
+#    # Check if GSL exists at the Homebrew path
+#    if paths.exists("/opt/homebrew/opt/gsl"):
+#        new_local_repository(
+#            name = "org_gnu_gsl",
+#            build_file_content = """
+#    cc_library(
+#    name = "gsl",
+#    hdrs = glob(["include/**/*.h"]),
+#    includes = ["include"],
+#    visibility = ["//visibility:public"],
+#    )
+#    """,
+#            path = "/opt/homebrew/opt/gsl",
+#        )
+
 # Creating aliases, from all dependencies defined in the WORKSPACE file.
 ALIASES = {
     "eigen": "@com_github_eigen_eigen//:eigen",
     "autodiff": "@com_github_autodiff_autodiff//:autodiff",
     "glog": "@com_github_google_glog//:glog",
     "cereal": "@com_github_uscilab_cereal//:cereal",
-    "gsl": "@org_gnu_gsl//:gsl",
+    "gsl": select({
+        ":local_brew_gnu_gsl": "@local_brew_gnu_gsl//:gsl",
+        "//conditions:default": "@org_gnu_gsl//:gsl",
+    }),
     "tbb": "@com_github_oneapi_onetbb//:tbb",
     "benchmark": "@com_google_benchmark//:benchmark",
     "highfive": "@com_github_bluebrain_highfive//:highfive_cmake",
@@ -79,6 +106,7 @@ cc_library(
     deps = [
         "@com_github_eigen_eigen//:header_lib",
         "@com_github_gabime_spdlog//:spdlog",
+        ":gsl",
         #        "@com_github_nvidia_thrust//:thrust",
         "@com_github_oneapi_onetbb//:tbb",
         "@com_github_uscilab_cereal//:cereal",

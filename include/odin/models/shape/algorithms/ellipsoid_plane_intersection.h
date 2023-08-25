@@ -15,31 +15,26 @@ template<typename U>
 using vec3_type = Eigen::Vector3<U>;
 
 template<typename U>
-vec3_type<U> calculate_polar_plane_pole(
-        vec3_type<U> normal, U offset, vec3_type<U> semi_axes) {
+vec3_type<U> calculate_polar_plane_pole(vec3_type<U> normal, U offset, vec3_type<U> semi_axes) {
     auto n = normal.normalized();
     if (safe_to_divide(1., offset)) {
-        return (semi_axes.array().pow(2).matrix().cwiseProduct(n) / offset)
-                .eval();
+        return (semi_axes.array().pow(2).matrix().cwiseProduct(n) / offset).eval();
     } else {
         return (semi_axes.array().pow(2).matrix().cwiseProduct(n)).eval();
     }
 }
 template<typename U>
-vec3_type<U> calculate_polar_plane_pole(
-        vec3_type<U> normal, U f, U a, U b, U c) {
+vec3_type<U> calculate_polar_plane_pole(vec3_type<U> normal, U f, U a, U b, U c) {
     return calculate_polar_plane_pole(normal, f, vec3_type<U>(a, b, c));
 }
 
 template<typename U>
 vec3_type<U> calculate_polar_plane_pole(U nx, U ny, U nz, U f, U a, U b, U c) {
-    return calculate_polar_plane_pole(
-            vec3_type<U>(nx, ny, nz), f, vec3_type<U>(a, b, c));
+    return calculate_polar_plane_pole(vec3_type<U>(nx, ny, nz), f, vec3_type<U>(a, b, c));
 }
 
 template<typename U>
-std::tuple<U, U, U, U> polar_plane_from_point(
-        const Eigen::Vector3d &p, U a, U b, U c) {
+std::tuple<U, U, U, U> polar_plane_from_point(const Eigen::Vector3d &p, U a, U b, U c) {
     // TODO: check if p is on / inside the ellipsoid
     U a2 = a * a;
     U b2 = b * b;
@@ -66,8 +61,8 @@ vec3_type<U> generate_orthogonal_vector(const vec3_type<U> &vi) {
 }
 
 template<typename U>
-std::tuple<vec3_type<U>, vec3_type<U>, vec3_type<U>, U, U>
-ellipse_of_intersection(vec3_type<U> normal, U offset, vec3_type<U> semi_axes) {
+std::tuple<vec3_type<U>, vec3_type<U>, vec3_type<U>, U, U> ellipse_of_intersection(
+        vec3_type<U> normal, U offset, vec3_type<U> semi_axes) {
     // Nomenclature:
     // =================
     // n : unit normal vector of plane
@@ -88,8 +83,7 @@ ellipse_of_intersection(vec3_type<U> normal, U offset, vec3_type<U> semi_axes) {
     auto n = normal.normalized();
 
     // Define D1 as a diagonal matrix with 1/a, 1/b, 1/c
-    Eigen::DiagonalMatrix<U, 3> D1(
-            1 / semi_axes[0], 1 / semi_axes[1], 1 / semi_axes[2]);
+    Eigen::DiagonalMatrix<U, 3> D1(1 / semi_axes[0], 1 / semi_axes[1], 1 / semi_axes[2]);
 
     // Define q, any point on plane, interior to the ellipse
     auto q = n * offset;
@@ -111,8 +105,7 @@ ellipse_of_intersection(vec3_type<U> normal, U offset, vec3_type<U> semi_axes) {
         if (D1r.dot(D1r) - D1s.dot(D1s) == 0) {
             omega = M_PI_4;
         } else {
-            omega = 0.5
-                  * std::atan(2 * D1r.dot(D1s) / (D1r.dot(D1r) - D1s.dot(D1s)));
+            omega = 0.5 * std::atan(2 * D1r.dot(D1s) / (D1r.dot(D1r) - D1s.dot(D1s)));
         }
         r = (std::cos(omega) * r + std::sin(omega) * s).normalized();
         s = n.cross(r).normalized();
@@ -128,8 +121,7 @@ ellipse_of_intersection(vec3_type<U> normal, U offset, vec3_type<U> semi_axes) {
 
     // Expression for d, k (Eq. 11)
     auto k = q.dot(n);
-    auto d = k * k
-           / (semi_axes.array().pow(2).matrix().dot(n.array().pow(2).matrix()));
+    auto d = k * k / (semi_axes.array().pow(2).matrix().dot(n.array().pow(2).matrix()));
 
     // Ellipse center, m (Eq. 39)
     vec3_type<U> m;
@@ -148,67 +140,16 @@ ellipse_of_intersection(vec3_type<U> normal, U offset, vec3_type<U> semi_axes) {
 }
 
 template<typename U>
-std::tuple<vec3_type<U>, vec3_type<U>, vec3_type<U>, U, U>
-ellipse_of_intersection(U nx, U ny, U nz, U f, U a, U b, U c) {
-    return ellipse_of_intersection(
-            vec3_type<U>(nx, ny, nz), f, vec3_type<U>(a, b, c));
+std::tuple<vec3_type<U>, vec3_type<U>, vec3_type<U>, U, U> ellipse_of_intersection(
+        U nx, U ny, U nz, U f, U a, U b, U c) {
+    return ellipse_of_intersection(vec3_type<U>(nx, ny, nz), f, vec3_type<U>(a, b, c));
 }
 
 template<typename U>
-std::tuple<vec3_type<U>, vec3_type<U>, vec3_type<U>, U, U>
-ellipse_of_intersection(vec3_type<U> n, U f, U a, U b, U c) {
+std::tuple<vec3_type<U>, vec3_type<U>, vec3_type<U>, U, U> ellipse_of_intersection(
+        vec3_type<U> n, U f, U a, U b, U c) {
     return ellipse_of_intersection(n, f, vec3_type<U>(a, b, c));
 }
-
-//template<typename U>
-//__global__
-//        void ellipse_of_intersection(vec3_type<U> normal, vec3_type<U> semi_axes, U offset,
-//                                vec3_type<U>* m, vec3_type<U>* r, vec3_type<U>* s, U* A, U* B) {
-//
-//    auto n = normal.normalized();
-//    Eigen::DiagonalMatrix<U, 3> D1(1 / semi_axes[0], 1 / semi_axes[1], 1 / semi_axes[2]);
-//    auto q = n * offset;
-//
-//    for (auto i = 0; i < 3; ++i) {
-//        *r = Eigen::Vector3<U>::Unit(i).cross(n);
-//        if (r->norm() > std::numeric_limits<U>::epsilon()) { break; }
-//    }
-//
-//    *s = n.cross(*r);
-//
-//    auto D1r = D1 * *r;
-//    auto D1s = D1 * *s;
-//
-//    if (D1r.dot(D1s) != 0) {
-//        U omega;
-//        if (D1r.dot(D1r) - D1s.dot(D1s) == 0) {
-//            omega = M_PI_4;
-//        } else {
-//            omega = 0.5
-//                  * std::atan(2 * D1r.dot(D1s) / (D1r.dot(D1r) - D1s.dot(D1s)));
-//        }
-//        *r = (std::cos(omega) * *r + std::sin(omega) * *s).normalized();
-//        *s = n.cross(*r).normalized();
-//
-//        D1r = D1 * *r;
-//        D1s = D1 * *s;
-//    }
-//
-//    auto beta_1 = D1r.dot(D1r);
-//    auto beta_2 = D1s.dot(D1s);
-//    auto k = q.dot(n);
-//    auto d = k * k / (semi_axes.pow(2).dot(n.pow(2)));
-//
-//    if (k == 0) {
-//        *m = vec3_type<U>::Zero();
-//    } else {
-//        *m = k * (n - D1r.dot(n) / beta_1 * *r - D1s.dot(n) / beta_2 * *s);
-//    }
-//
-//    *A = std::sqrt((1 - d) / beta_1);
-//    *B = std::sqrt((1 - d) / beta_2);
-//}
-
 
 }// namespace odin::algorithms
 

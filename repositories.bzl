@@ -2,6 +2,21 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+load("@bor//odin:bazel/rules/gsl.bzl", "gsl_repository")
+
+#==============================================================================
+#                              Bazel Dependencies
+#    Description: Dependencies required for the Bazel build system
+#==============================================================================
+maybe(
+    http_archive,
+    name = "bazel_skylib",
+    sha256 = "66ffd9315665bfaafc96b52278f57c7e2dd09f5ede279ea6d39b2be471e7e3aa",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.4.2.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.4.2.tar.gz",
+    ],
+)
 
 #==============================================================================
 #                         Polyhedral Gravity Dependencies
@@ -118,20 +133,12 @@ def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True, thr
         strip_prefix = "fmt-9.1.0",
     )
 
-    #    maybe(
-    #        http_archive,
-    #        name = "rules_foreign_cc",
-    #        sha256 = "2a4d07cd64b0719b39a7c12218a3e507672b82a97b98c6a89d38565894cf7c51",
-    #        strip_prefix = "rules_foreign_cc-0.9.0",
-    #        urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/0.9.0.tar.gz"],
-    #    )
     maybe(
         git_repository,
         name = "rules_foreign_cc",
         remote = "https://github.com/bazelbuild/rules_foreign_cc",
         commit = "816905a078773405803e86635def78b61d2f782d",
     )
-    #    816905a078773405803e86635def78b61d2f782d
 
     maybe(
         http_archive,
@@ -190,6 +197,19 @@ def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True, thr
         sha256 = "927475805a19b24f9c67dd9765bb4dcc8b10fd7f0e616905cc4fee406bed81a7",
         strip_prefix = "benchmark-1.8.0",
         urls = ["https://github.com/google/benchmark/archive/v1.8.0.zip"],
+    )
+
+    native.new_local_repository(
+        name = "local_brew_gnu_gsl",
+        build_file_content = """
+cc_library(
+    name = "gsl",
+    hdrs = glob(["include/**/*.h"]),
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+""",
+        path = "/opt/homebrew/opt/gsl/",
     )
 
     maybe(
