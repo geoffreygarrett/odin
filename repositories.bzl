@@ -194,6 +194,34 @@ def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True, thr
         urls = ["https://github.com/USCiLab/cereal/archive/v1.3.2.zip"],
     )
 
+    http_archive(
+        name = "build_bazel_apple_support",
+        sha256 = "45d6bbad5316c9c300878bf7fffc4ffde13d620484c9184708c917e20b8b63ff",
+        url = "https://github.com/bazelbuild/apple_support/releases/download/1.8.1/apple_support.1.8.1.tar.gz",
+    )
+
+    maybe(
+        git_repository,
+        name = "rules_metal",
+        remote = "https://github.com/nchavez324/rules_metal",
+        commit = "96594931692cef6d842a7a2dbc9249882d838bf3",
+    )
+
+    maybe(
+        http_archive,
+        name = "developer_apple_com_metal_cpp",
+        build_file = "@//odin:external/metal_cpp.BUILD",
+        urls = ["https://developer.apple.com/metal/cpp/files/metal-cpp_macOS14_iOS17-beta.zip"],
+        strip_prefix = "metal-cpp",
+        sha256 = "2009a339ecbd56b36601435fe08c415749f8ad09145755472bb637b319003367",
+    )
+
+    #    http_archive(
+    #        name = "metal_cpp_macOS13_iOS16",
+    #        urls = ["https://developer.apple.com/metal/cpp/files/metal-cpp_macOS13_iOS16.zip"],
+    #        build_file = "@//:BUILD.metal_cpp_macOS13_iOS16",
+    #    )
+
     maybe(
         http_archive,
         name = "com_google_googletest",
@@ -221,6 +249,19 @@ cc_library(
 )
 """,
         path = "/opt/homebrew/opt/gsl/",
+    )
+
+    native.new_local_repository(
+        name = "local_apt_gnu_gsl",
+        build_file_content = """
+cc_library(
+    name = "gsl",
+    hdrs = glob(["include/**/*.h"]),
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+""",
+        path = "/usr/include/gsl/",
     )
 
     maybe(
