@@ -28,7 +28,7 @@ config_setting(
 
 # Creating aliases, from all dependencies defined in the WORKSPACE file.
 ALIASES = {
-    "eigen": "@com_github_eigen_eigen//:eigen",
+    "eigen": "@com_github_eigen_eigen//:header_lib",
     "autodiff": "@com_github_autodiff_autodiff//:autodiff",
     "glog": "@com_github_google_glog//:glog",
     "cereal": "@com_github_uscilab_cereal//:cereal",
@@ -95,22 +95,53 @@ filegroup(
 )
 
 # Odin Library
+CORE_LINKOPTS = select({
+    "@platforms//os:osx": [
+        #        "-lomp",
+    ],
+    "//conditions:default": [
+        "-fopenmp",  # Add the -fopenmp flag
+    ],
+})
+
+CORE_COPTS = select({
+    "@platforms//os:osx": [
+        "-Xpreprocessor",
+        "-fopenmp",  # Add the -fopenmp flag
+    ],
+    "//conditions:default": [
+        "-fopenmp",  # Add the -fopenmp flag
+        "-fPIC",
+        "-std=c++20",
+    ],
+})
+
 cc_library(
     name = "odin",
     hdrs = [
         ":odin_headers",
     ],
-    copts = ["-std=c++20"],
+    copts = CORE_COPTS,
     includes = ["include"],
+    linkopts = CORE_LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_eigen_eigen//:header_lib",
         "@com_github_gabime_spdlog//:spdlog",
         ":gsl",
+
         #        "@com_github_nvidia_thrust//:thrust",
         "@com_github_oneapi_onetbb//:tbb",
         "@com_github_uscilab_cereal//:cereal",
+        #        "@libomp//:omp",
     ],
+    #    + select({
+    #        "@platforms//os:osx": [
+    #            "@libomp//:omp",
+    #        ],
+    #        "//conditions:default": [
+    #        ],
+    #    }),
 )
 
 # Configuration settings

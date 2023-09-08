@@ -44,7 +44,8 @@ cc_library(
     deps = [
         "//autodiff:reverse",
         "//autodiff:forward",
-        "@com_github_eigen_eigen//:eigen_cmake",
+        #        "@com_github_eigen_eigen//:eigen",
+        #        "@com_github_eigen_eigen//:eigen_cmake",
     ],
     visibility = ["//visibility:public"],
     includes = ["."],

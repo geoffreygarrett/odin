@@ -8,6 +8,7 @@
 #include <tbb/blocked_range3d.h>
 #include <tbb/parallel_for.h>
 #include <unsupported/Eigen/CXX11/Tensor>
+#include <spdlog/spdlog.h>
 
 
 namespace odin {

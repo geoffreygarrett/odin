@@ -1,7 +1,5 @@
 //
-//  add.metal
-//
-//  Created by Srimukh Sripada on 03.12.21.
+//  op_addition.metal
 //
 
 #include <metal_stdlib>

@@ -4,10 +4,16 @@
 #include <Eigen/Core>
 #include <cstdlib>
 
+#ifdef ODIN_AUTODIFF
+#define ODIN_CONST
+#else
+#define ODIN_CONST const
+#endif
+
 namespace odin {
 
     template<typename T, std::size_t Dim = 3>
-    concept GravitationalConcept = requires(T a, const Eigen::Vector<typename T::Scalar, Dim> &position) {
+    concept GravitationalConcept = requires(T a, ODIN_CONST Eigen::Vector<typename T::Scalar, Dim> &position) {
         // Ensure that a type T has a type member Scalar
         typename T::Scalar;
 

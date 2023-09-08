@@ -8,6 +8,10 @@
 #include <Foundation/Foundation.hpp>
 #include <Metal/Metal.hpp>
 
+const unsigned int array_length = 1 << 25;
+const unsigned int buffer_size  = array_length * sizeof(float);
+
+
 class metal_adder {
 public:
     MTL::Device               *m_device;

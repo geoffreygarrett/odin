@@ -28,10 +28,10 @@ int main(int argc, const char* argv[]) {
     auto*                adder  = new metal_adder();
     adder->init_with_device(device);
 
-    const int array_length = 1 << 30;
+//    const int array_length = 1 << 30;
 
-    std::vector<float> dataA(array_length);
-    std::vector<float> dataB(array_length);
+    std::vector<float> dataA(array_length, 1.0f);
+    std::vector<float> dataB(array_length, 2.0f);
     std::vector<float> result_cpu(array_length);
 
     // Initialize vectors
@@ -58,12 +58,22 @@ int main(int argc, const char* argv[]) {
     std::cout << "Time taken by GPU-based addition: " << elapsed_gpu.count() << " ms\n";
 
     auto result_ptr = (float*) adder->m_buffer_result->contents();
-    // You can uncomment the next lines to print the results if you wish
-    /*
+
+    // Verify results
     for (int index = 0; index < array_length; index++) {
-        std::cout << result_ptr[index] << " ";
+        if (result_ptr[index] != result_cpu[index]) {
+            std::cout << "Error: GPU result does not match CPU result at index " << index << "\n";
+            std::cout << "GPU result: " << result_ptr[index] << "\n";
+            std::cout << "CPU result: " << result_cpu[index] << "\n";
+            return 1;
+        }
     }
-    */
+    // You can uncomment the next lines to print the results if you wish
+//    /*
+//    for (int index = 0; index < array_length; index++) {
+//        std::cout << result_ptr[index] << " ";
+//    }
+//    */
 
     std::cout << "Execution finished.\n";
     p_pool->release();

@@ -176,13 +176,21 @@ def odin_dependencies(rules_foreign_cc = True, spdlog = True, fmtlib = True, thr
         urls = ["https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz"],
     )
 
+    #    maybe(
+    #        http_archive,
+    #        name = "com_github_autodiff_autodiff",
+    #        build_file = "@//odin:external/bazel_autodiff.BUILD",
+    #        sha256 = "ce87b642272a84f3dcce5463d0f97ef30b15e5a5645898061c06c16a8d61bf22",
+    #        strip_prefix = "autodiff-1.0.3",
+    #        urls = ["https://github.com/autodiff/autodiff/archive/v1.0.3.zip"],
+    #    )
+
     maybe(
-        http_archive,
+        git_repository,
         name = "com_github_autodiff_autodiff",
+        remote = "http://github.com/autodiff/autodiff",
+        commit = "247620ddc19be689e7f122ec914b4b3f9e95aeb3",
         build_file = "@//odin:external/bazel_autodiff.BUILD",
-        sha256 = "ce87b642272a84f3dcce5463d0f97ef30b15e5a5645898061c06c16a8d61bf22",
-        strip_prefix = "autodiff-1.0.3",
-        urls = ["https://github.com/autodiff/autodiff/archive/v1.0.3.zip"],
     )
 
     maybe(

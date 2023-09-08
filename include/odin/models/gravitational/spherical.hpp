@@ -8,37 +8,325 @@
  * - https://phys.libretexts.org/Bookshelves/University_Physics/Book%3A_Physics_(Boundless)/5%3A_Uniform_Circular_Motion_and_Gravitation/5.5%3A_Newtons_Law_of_Universal_Gravitation
  * - https://en.wikipedia.org/wiki/Shell_theorem
  */
-#include "gravitational_base.hpp"
 #include <Eigen/Core>
 
+#include "gravitational_base.hpp"
+#include "gravitational_concept.hpp"
 
-template<typename Derived, typename S, size_t Dim = 3>
+#ifdef ODIN_AUTODIFF
+#define ODIN_CONST
+#include <autodiff/forward/real.hpp>
+#include <autodiff/forward/real/eigen.hpp>
+using namespace autodiff;
+#else
+#define ODIN_CONST const
+#endif
+
+namespace mlib {
+
+
+#ifdef __APPLE__// if this is apple, use custom implementation of assoc_legendre
+#include <cmath>
+
+template<typename Scalar>
+Scalar factorial(int n) {
+    if (n == 0) return 1.0;
+    Scalar result = 1.0;
+    for (int i = 1; i <= n; ++i) { result *= i; }
+    return result;
+}
+
+template<typename Scalar>
+Scalar assoc_legendre(int l, int m, double x) {
+    Scalar sum = 0.0;
+    for (int k = 0; k <= (l - m) / 2; ++k) {
+        Scalar term = std::pow(-1.0, k) * factorial<Scalar>(2 * l - 2 * k)
+                    / (std::pow(2.0, l) * factorial<Scalar>(k) * factorial<Scalar>(l - k)
+                            * factorial<Scalar>(l - m - 2 * k))
+                    * std::pow(1.0 - x * x, (l - m - 2 * k) / 2.0);
+        sum += term;
+    }
+    return std::sqrt((2.0 * l + 1.0) * factorial<Scalar>(l - m) / (2.0 * factorial<Scalar>(l + m)))
+         * sum;
+}
+#else
+
+#include <cmath>
+
+using assoc_legendre = std::assoc_legendre;
+
+#endif
+}// namespace mlib
+
+
+// macro to check for C++20
+#if __cplusplus > 201703L
+// Two argument version
+#define ODIN_ENABLE_IF_TYPE_MATCHES_2(TYPE1, TYPE2) requires std::is_same_v<TYPE1, TYPE2>
+// Three argument version
+#define ODIN_ENABLE_IF_TYPE_MATCHES_3(TYPE1, TYPE2, TYPE3) \
+    requires(std::is_same_v<TYPE1, TYPE2> || std::is_same_v<TYPE1, TYPE3>)
+#else
+// Two argument version
+#define ODIN_ENABLE_IF_TYPE_MATCHES_2(TYPE1, TYPE2) \
+    std::enable_if_t<std::is_same_v<TYPE1, TYPE2>, TYPE2>
+// Three argument version
+#define ODIN_ENABLE_IF_TYPE_MATCHES_3(TYPE1, TYPE2, TYPE3)                                       \
+    std::enable_if_t<std::disjunction_v<std::is_same<TYPE1, TYPE2>, std::is_same<TYPE1, TYPE3>>, \
+            TYPE1>
+#endif
+
+// Using helper macros to differentiate between the number of arguments
+#define GET_MACRO(_1, _2, _3, NAME, ...) NAME
+#define ODIN_ENABLE_IF_TYPE_MATCHES(...)                                                 \
+    GET_MACRO(__VA_ARGS__, ODIN_ENABLE_IF_TYPE_MATCHES_3, ODIN_ENABLE_IF_TYPE_MATCHES_2) \
+    (__VA_ARGS__)
+
+
+template<typename Derived, typename Scalar, size_t Dim = 3, typename... Params>
+class model_base : public odin::crtp_base<model_base<Derived, Scalar, Dim, Params...>> {
+public:
+    using params_type = std::tuple<Params...>;
+    using scalar_type = Scalar;
+    using vector_type = Eigen::Matrix<scalar_type, Dim, 1>;
+
+    explicit model_base(Params... params)
+        : m_params(params...) {}
+
+    // With eval
+    template<typename Func, typename O, typename EvalType, typename... WrtArgs, typename... AtArgs>
+    ODIN_ENABLE_IF_TYPE_MATCHES(scalar_type, autodiff::dual, autodiff::real)
+    auto calc_partial(Func         lambda,
+            EvalType              &eval,
+            std::tuple<WrtArgs...> wrt_args,
+            std::tuple<AtArgs...>  at_args) {
+        if constexpr (std::is_same_v<O, scalar_type>) {
+            return gradient(lambda,
+                    wrt(std::get<WrtArgs>(wrt_args)...),
+                    at(std::get<AtArgs>(at_args)...),
+                    eval);
+        } else if constexpr (std::is_same_v<O, vector_type>) {
+            return jacobian(lambda,
+                    wrt(std::get<WrtArgs>(wrt_args)...),
+                    at(std::get<AtArgs>(at_args)...),
+                    eval);
+        } else {
+            static_assert(sizeof(O) == -1, "Invalid return type for partial deducing template");
+        }
+    }
+
+    // Without eval
+    template<typename Func, typename O, typename... WrtArgs, typename... AtArgs>
+    ODIN_ENABLE_IF_TYPE_MATCHES(scalar_type, autodiff::dual, autodiff::real)
+    auto calc_partial(Func lambda, std::tuple<WrtArgs...> wrt_args, std::tuple<AtArgs...> at_args) {
+        if constexpr (std::is_same_v<O, scalar_type>) {
+            scalar_type eval;
+            return gradient(lambda,
+                    wrt(std::get<WrtArgs>(wrt_args)...),
+                    at(std::get<AtArgs>(at_args)...),
+                    eval);
+        } else if constexpr (std::is_same_v<O, vector_type>) {
+            vector_type eval;
+            return jacobian(lambda,
+                    wrt(std::get<WrtArgs>(wrt_args)...),
+                    at(std::get<AtArgs>(at_args)...),
+                    eval);
+        } else {
+            static_assert(sizeof(O) == -1, "Invalid return type for partial deducing template");
+        }
+    }
+
+    // Function to calculate partial w.r.t. a subset of the parameters
+    template<typename Func, typename O, std::size_t... I>
+    auto calc_partial_with_params(Func lambda, std::index_sequence<I...>) {
+        return calc_partial<Func, O>(
+                [&](auto &&...args) {
+                    return lambda(std::get<I>(m_params)..., std::forward<decltype(args)>(args)...);
+                },
+                std::get<I>(m_params)...);
+    }
+
+    // Function to calculate partial w.r.t. a single parameter at index I
+    template<typename Func, typename O, std::size_t I>
+    auto calc_partial_with_param(Func lambda) {
+        return calc_partial<Func, O>(
+                [&](auto &&...args) {
+                    return lambda(std::get<I>(m_params), std::forward<decltype(args)>(args)...);
+                },
+                std::get<I>(m_params));
+    }
+
+protected:
+    params_type m_params;
+};
+
+
+// Using named constants for better code readability
+constexpr std::size_t CENTRAL_POSITION  = 0;
+constexpr std::size_t GRAVITY_PARAMETER = 1;
+
+template<typename Derived, typename Scalar, std::size_t Dim = 3>
+class gravity_base
+    : public model_base<Derived, Scalar, Dim, Scalar, Eigen::Matrix<Scalar, Dim, 1>> {
+public:
+    using vector_type = Eigen::Matrix<Scalar, Dim, 1>;
+    using model_base<Derived, Scalar, Dim, Scalar, vector_type>::model_base;
+
+    // Thread-local copy of the derived class
+    Derived thread_local_copy() {
+        return this->as_derived().thread_local_copy_impl();
+    }
+
+    // Potential energy calculation
+    Scalar potential(ODIN_CONST vector_type &position) const {
+        return this->as_derived().potential_impl(position);
+    }
+
+    // Acceleration calculation
+    vector_type acceleration(ODIN_CONST vector_type &position) const {
+        return this->as_derived().acceleration_impl(position);
+    }
+};
+
+template<typename Scalar, std::size_t Dim = 3>
+class point_mass_gravity : public gravity_base<point_mass_gravity<Scalar, Dim>, Scalar, Dim> {
+public:
+    using scalar_type = Scalar;
+    using vector_type = Eigen::Matrix<Scalar, Dim, 1>;
+    using gravity_base<point_mass_gravity<Scalar, Dim>, Scalar, Dim>::gravity_base;
+
+    template<typename T>
+    auto thread_local_copy_impl() {
+        return point_mass_gravity<T, Dim>(std::get<CENTRAL_POSITION>(this->params_),
+                std::get<GRAVITY_PARAMETER>(this->params_));
+    }
+
+    scalar_type potential_impl(ODIN_CONST vector_type &position) const {
+        auto r  = position - std::get<CENTRAL_POSITION>(this->params_);
+        auto GM = std::get<GRAVITY_PARAMETER>(this->params_);
+        return -GM / r.norm();
+    }
+
+    vector_type acceleration_impl(ODIN_CONST vector_type &position) const {
+        auto r           = position - std::get<CENTRAL_POSITION>(this->params_);
+        auto GM          = std::get<GRAVITY_PARAMETER>(this->params_);
+        auto r_norm_cube = r.norm() * r.norm() * r.norm();
+        return -GM * r / r_norm_cube;
+    }
+};
+
+template<typename Derived, typename S, size_t Dim = 3, typename... Params>
 class SphericalBase {
 public:
     using Scalar            = S;
     const static size_t dim = Dim;
     using Vector            = Eigen::Vector<Scalar, Dim>;
 
-    explicit SphericalBase(const Scalar  mu,
-                           const Scalar  radius   = 0,
-                           const Vector &position = Vector::Zero())
-        : position_(position), mu_(mu), radius_(radius) {}
+    explicit SphericalBase(ODIN_CONST Scalar mu,
+            ODIN_CONST Scalar                radius   = 0,
+            ODIN_CONST Vector               &position = Vector::Zero())
+        : position_(position),
+          mu_(mu),
+          radius_(radius) {}
 
-    Scalar static_potential(const Vector &rel_position, const Scalar mu, const Scalar radius = 0) {
+    Scalar static_potential(
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius = 0) {
         return static_cast<Derived *>(this)->static_potential_impl(rel_position, mu, radius);
     }
 
-    Vector static_acceleration(const Vector &rel_position, const Scalar mu, const Scalar radius = 0) {
+    Vector static_acceleration(
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius = 0) {
         return static_cast<Derived *>(this)->static_acceleration_impl(rel_position, mu, radius);
     }
 
-    [[nodiscard]] Scalar potential(const Vector &position) {
+#ifdef ODIN_AUTODIFF
+
+    [[nodiscard]] Scalar potential(ODIN_CONST Vector &position) {
+        Vector temp = position - position_;
+        return static_potential(temp, mu_, radius_);
+    }
+
+    [[nodiscard]] Vector acceleration(ODIN_CONST Vector &position) {
+        Vector temp = position - position_;
+        return static_acceleration(temp, mu_, radius_);
+    }
+
+    [[nodiscard]] auto potential(ODIN_CONST Vector &&position) {
+        Vector position_copy = std::move(position);// Create a non-const local copy
+        Vector rel_position  = (position_copy - position_).eval();
+        return static_potential(rel_position, mu_, radius_);
+    }
+
+    [[nodiscard]] auto acceleration(ODIN_CONST Vector &&position) {
+        Vector position_copy = std::move(position);// Create a non-const local copy
+        Vector rel_position  = (position_copy - position_).eval();
+        return static_acceleration(rel_position, mu_, radius_);
+    }
+
+    template<typename Func, typename O, typename T = Scalar>
+    ODIN_ENABLE_IF_TYPE_MATCHES(T, autodiff::dual, autodiff::real)
+    auto calc_partial(Func lambda, ODIN_CONST Vector &rel_position) {
+        if constexpr (std::is_same_v<O, Scalar>) {
+            T eval;
+            return gradient(lambda, wrt(rel_position), at(rel_position), eval);
+        } else if constexpr (std::is_same_v<O, Vector>) {
+            Vector eval;
+            return jacobian(lambda, wrt(rel_position), at(rel_position), eval);
+        } else {
+            static_assert(sizeof(O) == -1, "Invalid return type for partial deducing template");
+        }
+    }
+
+    // For lvalue references
+    template<typename T = Scalar>
+    ODIN_ENABLE_IF_TYPE_MATCHES(T, autodiff::dual, autodiff::real)
+    auto partial_potential_wrt_position(ODIN_CONST Vector &position) {
+        Vector rel_position = (position - position_).eval();
+        auto   lambda       = [this, rel_position](ODIN_CONST auto &arg) {
+            return this->static_potential(arg, this->mu_, this->radius_);
+        };
+        return calc_partial<decltype(lambda), Scalar, T>(lambda, rel_position);
+    }
+
+    // For rvalue references
+    template<typename T = Scalar>
+    ODIN_ENABLE_IF_TYPE_MATCHES(T, autodiff::dual, autodiff::real)
+    auto partial_potential_wrt_position(ODIN_CONST Vector &&position) {
+        Vector position_copy = std::move(position);
+        return partial_potential_wrt_position<T>(position_copy);
+    }
+
+    // Partial acceleration wrt position for lvalue references
+    template<typename T = Scalar>
+    ODIN_ENABLE_IF_TYPE_MATCHES(T, autodiff::dual, autodiff::real)
+    auto partial_acceleration_wrt_position(ODIN_CONST Vector &position) {
+        Vector rel_position = (position - position_).eval();
+        auto   lambda       = [this, &rel_position, mu_ = this->mu_, radius_ = this->radius_](
+                              ODIN_CONST auto &rel_position_) {
+            return this->static_acceleration(rel_position_, mu_, radius_);
+        };
+        return calc_partial<decltype(lambda), Vector, T>(lambda, rel_position);
+    }
+
+    // Partial acceleration wrt position for current instance, for rvalue references
+    template<typename T = Scalar>
+    ODIN_ENABLE_IF_TYPE_MATCHES(T, autodiff::dual, autodiff::real)
+    auto partial_acceleration_wrt_position(ODIN_CONST Vector &&position) {
+        Vector position_copy = std::move(position);             // Create a non-const local copy
+        return partial_acceleration_wrt_position(position_copy);// Delegate to lvalue overload
+    }
+
+#else
+
+    [[nodiscard]] Scalar potential(ODIN_CONST Vector &position) {
         return static_potential(position - position_, mu_, radius_);
     }
 
-    [[nodiscard]] Vector acceleration(const Vector &position) {
+    [[nodiscard]] Vector acceleration(ODIN_CONST Vector &position) {
         return static_acceleration(position - position_, mu_, radius_);
     }
+
+#endif
 
     [[nodiscard]] SphericalBase thread_local_copy() const {
         SphericalBase copy = *this;
@@ -60,22 +348,21 @@ public:
     using Vector = typename Base::Vector;
     using Scalar = typename Base::Scalar;
 
-    explicit PointMass(
-            const Scalar  mu,
-            const Vector &position = Vector::Zero())
-        : Base(mu, 0, position) {}
+#ifndef ODIN_AUTODIFF
+    explicit PointMass(ODIN_CONST Scalar mu, ODIN_CONST Vector &position = Vector::Zero())
+#else
+    explicit PointMass(ODIN_CONST Scalar mu, ODIN_CONST Vector &&position = Vector::Zero())
+#endif
+        : Base(mu, 0, position) {
+    }
 
     static Scalar static_potential_impl(
-            const Vector &rel_position,
-            const Scalar  mu,
-            const Scalar) {
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar) {
         return -mu / rel_position.norm();
     }
 
     static Vector static_acceleration_impl(
-            const Vector &rel_position,
-            const Scalar  mu,
-            const Scalar) {
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar) {
         return -mu * rel_position / pow(rel_position.norm(), 3);
     }
 };
@@ -89,29 +376,23 @@ public:
     using Vector = typename Base::Vector;
     using Scalar = typename Base::Scalar;
 
-    explicit HollowSphere(
-            const Scalar  mu,
-            const Scalar  radius,
-            const Vector &position = Vector::Zero())
+    explicit HollowSphere(ODIN_CONST Scalar mu,
+            ODIN_CONST Scalar               radius,
+            ODIN_CONST Vector              &position = Vector::Zero())
         : Base(mu, radius, position) {}
 
     static Scalar static_potential_impl(
-            const Vector &rel_position,
-            const Scalar  mu,
-            const Scalar  radius) {
-        const Scalar r = rel_position.norm();
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius) {
+        ODIN_CONST Scalar r = rel_position.norm();
         return (r > radius)
                      ? PointMass<Scalar, Dim>::static_potential_impl(rel_position, mu, radius)
                      : -mu / radius;
     }
     static Vector static_acceleration_impl(
-            const Vector &position,
-            const Scalar  mu,
-            const Scalar  radius) {
-        const Scalar r = position.norm();
-        return (r > radius)
-                     ? PointMass<Scalar, Dim>::static_acceleration_impl(position, mu, radius)
-                     : Vector::Zero();
+            ODIN_CONST Vector &position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius) {
+        ODIN_CONST Scalar r = position.norm();
+        return (r > radius) ? PointMass<Scalar, Dim>::static_acceleration_impl(position, mu, radius)
+                            : Vector::Zero();
     }
 };
 
@@ -123,26 +404,21 @@ public:
     using Vector = typename Base::Vector;
     using Scalar = typename Base::Scalar;
 
-    explicit HomogeneousSphere(
-            const Scalar  mu,
-            const Scalar  radius,
-            const Vector &position = Vector::Zero())
+    explicit HomogeneousSphere(ODIN_CONST Scalar mu,
+            ODIN_CONST Scalar                    radius,
+            ODIN_CONST Vector                   &position = Vector::Zero())
         : Base(mu, radius, position) {}
 
     static Scalar static_potential_impl(
-            const Vector &rel_position,
-            const Scalar  mu,
-            const Scalar  radius) {
-        const Scalar r = rel_position.norm();
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius) {
+        ODIN_CONST Scalar r = rel_position.norm();
         return (r > radius)
                      ? PointMass<Scalar, Dim>::static_potential_impl(rel_position, mu, radius)
                      : -mu * (3 * radius * radius - r * r) / (2 * pow(radius, 3));
     }
     static Vector static_acceleration_impl(
-            const Vector &rel_position,
-            const Scalar  mu,
-            const Scalar  radius) {
-        const Scalar r = rel_position.norm();
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius) {
+        ODIN_CONST Scalar r = rel_position.norm();
         return (r > radius)
                      ? PointMass<Scalar, Dim>::static_acceleration_impl(rel_position, mu, radius)
                      : -mu * rel_position / pow(radius, 3);
@@ -157,23 +433,18 @@ public:
     using Vector = typename Base::Vector;
     using Scalar = typename Base::Scalar;
 
-    explicit PlummerSphere(
-            const Scalar  mu,
-            const Scalar  radius,
-            const Vector &position = Vector::Zero())
+    explicit PlummerSphere(ODIN_CONST Scalar mu,
+            ODIN_CONST Scalar                radius,
+            ODIN_CONST Vector               &position = Vector::Zero())
         : Base(mu, radius, position) {}
 
     static Scalar static_potential_impl(
-            const Vector &rel_position,
-            const Scalar  mu,
-            const Scalar  radius) {
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius) {
         return -mu / std::sqrt(rel_position.squaredNorm() + radius * radius);
     }
 
     static Vector static_acceleration_impl(
-            const Vector &rel_position,
-            const Scalar  mu,
-            const Scalar  radius) {
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius) {
         return -mu * rel_position.normalized() / (rel_position.squaredNorm() + radius * radius);
     }
 };
@@ -186,25 +457,20 @@ public:
     using Vector = typename Base::Vector;
     using Scalar = typename Base::Scalar;
 
-    explicit IsochroneSphere(
-            const Scalar  mu,
-            const Scalar  radius,
-            const Vector &position = Vector::Zero())
+    explicit IsochroneSphere(ODIN_CONST Scalar mu,
+            ODIN_CONST Scalar                  radius,
+            ODIN_CONST Vector                 &position = Vector::Zero())
         : Base(mu, radius, position) {}
 
     static Scalar static_potential_impl(
-            const Vector &rel_position,
-            const Scalar  mu,
-            const Scalar  radius) {
-        const Scalar r = rel_position.norm();
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius) {
+        ODIN_CONST Scalar r = rel_position.norm();
         return -mu / (radius + std::sqrt(r * r + radius * radius));
     }
 
     static Vector static_acceleration_impl(
-            const Vector &rel_position,
-            const Scalar  mu,
-            const Scalar  radius) {
-        const Scalar r = rel_position.norm();
+            ODIN_CONST Vector &rel_position, ODIN_CONST Scalar mu, ODIN_CONST Scalar radius) {
+        ODIN_CONST Scalar r = rel_position.norm();
         return -mu * rel_position / pow(radius + std::sqrt(r * r + radius * radius), 3);
     }
 };
@@ -247,9 +513,7 @@ template<typename Scalar>
 Scalar factorial(int n) {
     Scalar result = 1;
 
-    for (int i = 1; i <= n; ++i) {
-        result *= i;
-    }
+    for (int i = 1; i <= n; ++i) { result *= i; }
 
     return result;
 }
@@ -265,7 +529,8 @@ Plm normalize_legendre(const Plm &P_lm) {
 
     for (int l = 0; l < P_lm.size(); l++) {
         for (int m = 0; m < P_lm[l].size(); m++) {
-            Scalar factor = sqrt((2 - (m == 0 ? 1 : 0)) * (2 * l + 1) * factorial<Scalar>(l - m) / factorial<Scalar>(l + m));
+            Scalar factor = sqrt((2 - (m == 0 ? 1 : 0)) * (2 * l + 1) * factorial<Scalar>(l - m)
+                                 / factorial<Scalar>(l + m));
             Pbar_lm[l][m] = factor * P_lm[l][m];
         }
     }
@@ -284,7 +549,8 @@ Plm denormalize_legendre(const Plm &Pbar_lm) {
 
     for (int l = 0; l < Pbar_lm.size(); l++) {
         for (int m = 0; m < Pbar_lm[l].size(); m++) {
-            Scalar factor = sqrt(1 / ((2 - (m == 0 ? 1 : 0)) * (2 * l + 1)) * factorial<Scalar>(l + m) / factorial<Scalar>(l - m));
+            Scalar factor = sqrt(1 / ((2 - (m == 0 ? 1 : 0)) * (2 * l + 1))
+                                 * factorial<Scalar>(l + m) / factorial<Scalar>(l - m));
             P_lm[l][m]    = factor * Pbar_lm[l][m];
         }
     }
@@ -325,7 +591,8 @@ struct CoefficientTransformations {
     static void normalize_in_place(Clm &inputClm, Slm &inputSlm) {
         for (int l = 0; l <= Degree; ++l) {
             for (int m = 0; m <= std::min(l, Order); ++m) {
-                Scalar factor = sqrt(1.0 / ((2 - (m == 0 ? 1 : 0)) * (2 * l + 1)) * factorial<Scalar>(l + m) / factorial<Scalar>(l - m));
+                Scalar factor = sqrt(1.0 / ((2 - (m == 0 ? 1 : 0)) * (2 * l + 1))
+                                     * factorial<Scalar>(l + m) / factorial<Scalar>(l - m));
                 inputClm[l][m] *= factor;
                 inputSlm[l][m] *= factor;
             }
@@ -335,7 +602,8 @@ struct CoefficientTransformations {
     static void denormalize_in_place(Clm &inputClm, Slm &inputSlm) {
         for (int l = 0; l <= Degree; ++l) {
             for (int m = 0; m <= std::min(l, Order); ++m) {
-                Scalar factor = sqrt((2 - (m == 0 ? 1 : 0)) * (2 * l + 1) * factorial<Scalar>(l - m) / factorial<Scalar>(l + m));
+                Scalar factor = sqrt((2 - (m == 0 ? 1 : 0)) * (2 * l + 1) * factorial<Scalar>(l - m)
+                                     / factorial<Scalar>(l + m));
                 inputClm[l][m] *= factor;
                 inputSlm[l][m] *= factor;
             }
@@ -367,7 +635,8 @@ struct CoefficientTransformations<Scalar, -1, -1> {
     static void normalize_in_place(Clm &inputClm, Slm &inputSlm) {
         for (int l = 0; l < inputClm.size(); ++l) {
             for (int m = 0; m < inputClm[l].size(); ++m) {
-                Scalar factor = sqrt(1.0 / ((2 - (m == 0 ? 1 : 0)) * (2 * l + 1)) * factorial<Scalar>(l + m) / factorial<Scalar>(l - m));
+                Scalar factor = sqrt(1.0 / ((2 - (m == 0 ? 1 : 0)) * (2 * l + 1))
+                                     * factorial<Scalar>(l + m) / factorial<Scalar>(l - m));
                 inputClm[l][m] *= factor;
                 inputSlm[l][m] *= factor;
             }
@@ -377,7 +646,8 @@ struct CoefficientTransformations<Scalar, -1, -1> {
     static void denormalize_in_place(Clm &inputClm, Slm &inputSlm) {
         for (int l = 0; l < inputClm.size(); ++l) {
             for (int m = 0; m < inputClm[l].size(); ++m) {
-                Scalar factor = sqrt((2 - (m == 0 ? 1 : 0)) * (2 * l + 1) * factorial<Scalar>(l - m) / factorial<Scalar>(l + m));
+                Scalar factor = sqrt((2 - (m == 0 ? 1 : 0)) * (2 * l + 1) * factorial<Scalar>(l - m)
+                                     / factorial<Scalar>(l + m));
                 inputClm[l][m] *= factor;
                 inputSlm[l][m] *= factor;
             }
@@ -392,14 +662,16 @@ struct GeopotentialCoefficientTransformations {
     using Clm = typename CoefficientsHolder<Scalar, Degree, Order>::Clm;
     using Slm = typename CoefficientsHolder<Scalar, Degree, Order>::Slm;
 
-    static std::pair<Clm, Slm> add_dimensions(Scalar mu, Scalar R, const Clm &inputC_lm, const Slm &inputS_lm) {
+    static std::pair<Clm, Slm> add_dimensions(
+            Scalar mu, Scalar R, const Clm &inputC_lm, const Slm &inputS_lm) {
         Clm C_lm = inputC_lm;
         Slm S_lm = inputS_lm;
         add_dimensions_in_place(mu, R, C_lm, S_lm);
         return {C_lm, S_lm};
     }
 
-    std::pair<Clm, Slm> remove_dimensions(Scalar mu, Scalar R, const Clm &inputC_lm, const Slm &inputS_lm) {
+    std::pair<Clm, Slm> remove_dimensions(
+            Scalar mu, Scalar R, const Clm &inputC_lm, const Slm &inputS_lm) {
         Clm C_lm = inputC_lm;
         Slm S_lm = inputS_lm;
         remove_dimensions_in_place(mu, R, C_lm, S_lm);
@@ -433,14 +705,16 @@ struct GeopotentialCoefficientTransformations<Scalar, -1, -1> {
     using Clm = typename CoefficientsHolder<Scalar, -1, -1>::Clm;
     using Slm = typename CoefficientsHolder<Scalar, -1, -1>::Slm;
 
-    std::pair<Clm, Slm> add_dimensions(Scalar mu, Scalar R, const Clm &inputC_lm, const Slm &inputS_lm) {
+    std::pair<Clm, Slm> add_dimensions(
+            Scalar mu, Scalar R, const Clm &inputC_lm, const Slm &inputS_lm) {
         Clm C_lm = inputC_lm;
         Slm S_lm = inputS_lm;
         add_dimensions_in_place(mu, R, C_lm, S_lm);
         return {C_lm, S_lm};
     }
 
-    std::pair<Clm, Slm> remove_dimensions(Scalar mu, Scalar R, const Clm &inputC_lm, const Slm &inputS_lm) {
+    std::pair<Clm, Slm> remove_dimensions(
+            Scalar mu, Scalar R, const Clm &inputC_lm, const Slm &inputS_lm) {
         Clm C_lm = inputC_lm;
         Slm S_lm = inputS_lm;
         remove_dimensions_in_place(mu, R, C_lm, S_lm);
@@ -486,7 +760,8 @@ struct GeopotentialCoefficientTransformations<Scalar, -1, -1> {
 //auto [denormalizedClm, denormalizedSlm] = BackwardNormalize<double, -1, -1>::denormalize(normalizedClm, normalizedSlm);
 
 template<typename S, int Degree, int Order = Degree, int Dim = 3>
-class [[maybe_unused]] SphericalHarmonics : public SphericalBase<SphericalHarmonics<S, Degree, Order, Dim>, S, Dim> {
+class [[maybe_unused]] SphericalHarmonics
+    : public SphericalBase<SphericalHarmonics<S, Degree, Order, Dim>, S, Dim> {
     using Base = SphericalBase<SphericalHarmonics<S, Degree, Order, Dim>, S, Dim>;
 
 public:
@@ -499,17 +774,18 @@ public:
     Slm Slm_;
     Plm Plm_;
 
-    explicit SphericalHarmonics(
-            const Scalar  mu,
-            const Scalar  radius,
-            const Clm     Cnm      = CoefficientsHolder<Scalar, Degree, Order>::Clm(),
-            const Slm     Snm      = CoefficientsHolder<Scalar, Degree, Order>::Slm(),
-            const Vector &position = Vector::Zero())
-        : Base(mu, radius, position), Clm_(Cnm), Slm_(Snm) {
+    explicit SphericalHarmonics(const Scalar mu,
+            const Scalar                     radius,
+            const Clm                        Cnm = CoefficientsHolder<Scalar, Degree, Order>::Clm(),
+            const Slm                        Snm = CoefficientsHolder<Scalar, Degree, Order>::Slm(),
+            const Vector                    &position = Vector::Zero())
+        : Base(mu, radius, position),
+          Clm_(Cnm),
+          Slm_(Snm) {
         if constexpr (Degree == -1 && Order == -1) {
             int degree = Clm_.size() - 1;
             int order  = Clm_.front().size() - 1;
-            Plm_       = AssociatedLegendrePolynomialsHolder<Scalar, Degree, Order>::init(degree, order);
+            Plm_ = AssociatedLegendrePolynomialsHolder<Scalar, Degree, Order>::init(degree, order);
         } else {
             Plm_ = AssociatedLegendrePolynomialsHolder<Scalar, Degree, Order>::init();
         }
@@ -537,8 +813,8 @@ public:
             for (size_t m = 0; m <= l && m < Clm_[l].size(); ++m) {
                 Scalar cos_m_lambda = std::cos(m * lambda);
                 Scalar sin_m_lambda = std::sin(m * lambda);
-                Scalar P_lm         = std::assoc_legendre(l, m, sin_phi);
-                Scalar term         = P_lm * (Clm_[l][m] * cos_m_lambda + Slm_[l][m] * sin_m_lambda);
+                Scalar P_lm         = mlib::assoc_legendre(l, m, sin_phi);
+                Scalar term = P_lm * (Clm_[l][m] * cos_m_lambda + Slm_[l][m] * sin_m_lambda);
                 V += a_r_ratio_pow_l * term;
                 //                ODIN_LOG_INFO << "l: " << l << " m: " << m << " P_lm: " << P_lm << " term: " << term << " V: " << V << std::endl;
             }
@@ -563,10 +839,12 @@ public:
     }
 
 
-    Vector static_acceleration_impl(const Vector &rel_position, const Scalar mu, const Scalar radius) {
+    Vector static_acceleration_impl(
+            const Vector &rel_position, const Scalar mu, const Scalar radius) {
         Scalar r = rel_position.norm();
         if (r < radius) {
-            return HomogeneousSphere<Scalar, Dim>::static_acceleration_impl(rel_position, mu, radius);
+            return HomogeneousSphere<Scalar, Dim>::static_acceleration_impl(
+                    rel_position, mu, radius);
         }
 
         Scalar phi    = std::acos(rel_position.z() / r);
@@ -583,7 +861,7 @@ public:
         //        Plm_[0][0] = 1;
         //        //
         //        for (size_t l = 1; l < Clm_.size(); ++l) {
-        //            Scalar P_ll = std::assoc_legendre(l, l, sin_phi);
+        //            Scalar P_ll = mlib::assoc_legendre(l, l, sin_phi);
         //            Scalar P_ll_1;
         //            if (sin_phi == 1 || sin_phi == -1) {
         //                P_ll_1 = 0;// or some other appropriate value
@@ -603,9 +881,7 @@ public:
 
         // precompute all P
         for (size_t l = 0; l < Clm_.size(); ++l) {
-            for (size_t m = 0; m <= l; ++m) {
-                Plm_[l][m] = std::assoc_legendre(l, m, sin_phi);
-            }
+            for (size_t m = 0; m <= l; ++m) { Plm_[l][m] = mlib::assoc_legendre(l, m, sin_phi); }
         }
 
         for (size_t l = 0; l < Clm_.size(); ++l) {
@@ -613,21 +889,26 @@ public:
                 Scalar cos_m_lambda = std::cos(m * lambda);
                 Scalar sin_m_lambda = std::sin(m * lambda);
                 Scalar common_term  = (Clm_[l][m] * cos_m_lambda + Slm_[l][m] * sin_m_lambda);
-                acceleration[0] -= ((l + 1) * Plm_[l][m] * common_term) * a_r_ratio_pow_l;// radial component
+                acceleration[0] -= ((l + 1) * Plm_[l][m] * common_term)
+                                 * a_r_ratio_pow_l;// radial component
 
-                if (l == 0 && m == 0) { continue; }                                                                     // only radial component for l=0, m=0
-                Scalar x = sin_phi;  // We make the change of variables x = sin(phi)
-                Scalar dx_dphi = cos_phi;  // Derivative of sin(phi) w.r.t. phi
+                if (l == 0 && m == 0) { continue; }// only radial component for l=0, m=0
+                Scalar x       = sin_phi;          // We make the change of variables x = sin(phi)
+                Scalar dx_dphi = cos_phi;          // Derivative of sin(phi) w.r.t. phi
 
                 // Compute the derivative of the associated Legendre function w.r.t. x
-                Scalar dPlm_dx = (1- x * x) * ((l - m + 1) * x * Plm_[l][m] - (l + 1) * Plm_[l + 1][m]);
+                Scalar dPlm_dx
+                        = (1 - x * x) * ((l - m + 1) * x * Plm_[l][m] - (l + 1) * Plm_[l + 1][m]);
 
                 // Then, by the chain rule, compute the derivative of P_{l, m}(sin(phi)) w.r.t. phi
                 Scalar dPlm_dphi = dPlm_dx * dx_dphi;
                 acceleration[1] += (dPlm_dphi * common_term) * a_r_ratio_pow_l;
 
                 if (l == 1 && m == 0) { continue; }
-                acceleration[2] += m * (Plm_[l][m] / cos_phi * (-Clm_[l][m] * sin_m_lambda + Slm_[l][m] * cos_m_lambda)) * a_r_ratio_pow_l;
+                acceleration[2] += m
+                                 * (Plm_[l][m] / cos_phi
+                                         * (-Clm_[l][m] * sin_m_lambda + Slm_[l][m] * cos_m_lambda))
+                                 * a_r_ratio_pow_l;
             }
             a_r_ratio_pow_l *= radius / r;
         }
@@ -637,10 +918,18 @@ public:
 };
 
 // Verify that it adheres to the GravitationalModel concept
-static_assert(is_gravitational_model_v<PointMass<double>>, "HollowSphere does not comply with GravitationalModel.");
-static_assert(is_gravitational_model_v<HollowSphere<double>>, "HollowSphere does not comply with GravitationalModel.");
-static_assert(is_gravitational_model_v<HomogeneousSphere<double>>, "HomogeneousSphere does not comply with GravitationalModel.");
-static_assert(is_gravitational_model_v<PlummerSphere<double>>, "PlummerSphere does not comply with GravitationalModel.");
-static_assert(is_gravitational_model_v<IsochroneSphere<double>>, "IsochroneSphere does not comply with GravitationalModel.");
+static_assert(is_gravitational_model_v<PointMass<double>>,
+        "HollowSphere does not comply with GravitationalModel.");
+static_assert(is_gravitational_model_v<HollowSphere<double>>,
+        "HollowSphere does not comply with GravitationalModel.");
+static_assert(is_gravitational_model_v<HomogeneousSphere<double>>,
+        "HomogeneousSphere does not comply with GravitationalModel.");
+static_assert(is_gravitational_model_v<PlummerSphere<double>>,
+        "PlummerSphere does not comply with GravitationalModel.");
+static_assert(is_gravitational_model_v<IsochroneSphere<double>>,
+        "IsochroneSphere does not comply with GravitationalModel.");
+
+}// namespace odin::gravity
+
 
 #endif// SPHERICAL_HPP

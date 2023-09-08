@@ -82,6 +82,27 @@ cc_binary(
 )
 
 cc_binary(
+    name = "gravity_autodiff",
+    srcs = ["gravity_autodiff.cpp"],
+    # c++20
+    copts = [
+        "-std=c++20",
+        #        "-fopenmp",
+    ],
+    defines = [
+        "ODIN_AUTODIFF",
+    ],
+    #    linkopts = ["-fopenmp"],
+    deps = [
+        #        "//:gsl",
+        #        "//:highfive",
+        "@//odin",
+        "@//odin:autodiff",
+        "@libomp//:omp",
+    ],
+)
+
+cc_binary(
     name = "sh_jgm_3",
     srcs = ["sh_jgm_3.cpp"],
     defines = [
